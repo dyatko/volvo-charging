@@ -17,8 +17,8 @@ import { Nav } from "@/components/nav";
 import { Footer } from "@/components/footer";
 import { getSession } from "@/lib/session";
 import { db } from "@/db/client";
-import { users, vehicles } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { stateSnapshots, users, vehicles } from "@/db/schema";
+import { desc, eq } from "drizzle-orm";
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
 
@@ -49,14 +49,16 @@ export const metadata: Metadata = {
     title: "EV Charging History — live charging status & session log for your Volvo",
     description:
       "Mobile-first dashboard for your Volvo's state of charge, charging sessions, and live location. Built on Volvo's official Connected Vehicle, Energy, and Location APIs.",
-    url: "/",
+    url: siteUrl,
     locale: "en_US",
+    // Image is auto-picked up from src/app/opengraph-image.tsx (file convention).
   },
   twitter: {
-    card: "summary",
+    card: "summary_large_image",
     title: "EV Charging History",
     description:
       "Live charging status and session log for your Volvo. Built on Volvo's official APIs.",
+    // Image is auto-picked up from src/app/opengraph-image.tsx (file convention).
   },
   robots: { index: true, follow: true },
   appleWebApp: {
@@ -67,7 +69,15 @@ export const metadata: Metadata = {
   // Next 16's apple-icon file convention only accepts jpg/png. SVG works
   // fine via an explicit `<link rel="apple-touch-icon">`, even though iOS
   // rasterizes it before showing on the home screen.
+  //
+  // `app/icon.svg` is auto-included by file convention and theme-adapts via
+  // `prefers-color-scheme` inside the SVG. The two `.ico` files below give
+  // older browsers (that don't honor SVG favicons) a theme-aware fallback.
   icons: {
+    icon: [
+      { url: "/favicon-light.ico", media: "(prefers-color-scheme: light)" },
+      { url: "/favicon-dark.ico", media: "(prefers-color-scheme: dark)" },
+    ],
     apple: [{ url: "/apple-icon.svg", type: "image/svg+xml" }],
   },
 };
@@ -112,7 +122,20 @@ export default async function RootLayout({
       .from(vehicles)
       .where(eq(vehicles.userId, session.userId))
       .orderBy(vehicles.vin);
-    navProps = { signedIn: true, vehicles: list, activeVin: userRow?.activeVin ?? null };
+    const activeVin = userRow?.activeVin ?? null;
+    let activeSoc: number | null = null;
+    if (activeVin) {
+      const snap = (
+        await db
+          .select({ soc: stateSnapshots.soc })
+          .from(stateSnapshots)
+          .where(eq(stateSnapshots.vin, activeVin))
+          .orderBy(desc(stateSnapshots.observedAt))
+          .limit(1)
+      )[0];
+      activeSoc = snap?.soc ?? null;
+    }
+    navProps = { signedIn: true, vehicles: list, activeVin, activeSoc };
   }
   return (
     <html

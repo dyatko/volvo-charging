@@ -1,7 +1,16 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { getSession } from "@/lib/session";
 import { TestTokenForm } from "@/components/test-token-form";
+
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+
+// Canonicalize the landing on `/` so query-string variants
+// (?mode=test, ?oauth_error=…, ?deleted=1) don't fragment the index.
+export const metadata: Metadata = {
+  alternates: { canonical: "/" },
+};
 
 type Search = Promise<{ oauth_error?: string; mode?: string; deleted?: string }>;
 
@@ -26,13 +35,37 @@ const features = [
 
 const jsonLd = {
   "@context": "https://schema.org",
-  "@type": "WebApplication",
-  name: "EV Charging History",
-  applicationCategory: "UtilityApplication",
-  operatingSystem: "Web",
-  description:
-    "Mobile-first dashboard for your Volvo's state of charge, charging session history, and live location. Built on Volvo's official Connected Vehicle, Energy, and Location APIs.",
-  offers: { "@type": "Offer", price: "0", priceCurrency: "EUR" },
+  "@graph": [
+    {
+      "@type": "WebApplication",
+      "@id": `${siteUrl}/#app`,
+      name: "EV Charging History",
+      applicationCategory: "UtilityApplication",
+      operatingSystem: "Web",
+      description:
+        "Mobile-first dashboard for your Volvo's state of charge, charging session history, and live location. Built on Volvo's official Connected Vehicle, Energy, and Location APIs.",
+      offers: { "@type": "Offer", price: "0", priceCurrency: "EUR" },
+      publisher: { "@id": `${siteUrl}/#org` },
+    },
+    {
+      "@type": "WebSite",
+      "@id": `${siteUrl}/#website`,
+      url: siteUrl,
+      name: "EV Charging History",
+      description:
+        "Live charging status and session log for your Volvo, built on Volvo's official APIs.",
+      publisher: { "@id": `${siteUrl}/#org` },
+      inLanguage: "en",
+    },
+    {
+      "@type": "Organization",
+      "@id": `${siteUrl}/#org`,
+      name: "EV Charging History",
+      url: siteUrl,
+      logo: `${siteUrl}/icon.svg`,
+      sameAs: ["https://github.com/dyatko/volvo-charging"],
+    },
+  ],
 };
 
 export default async function Home({ searchParams }: { searchParams: Search }) {
@@ -50,7 +83,7 @@ export default async function Home({ searchParams }: { searchParams: Search }) {
       {/* Hero ─────────────────────────────────────────────────────── */}
       <section className="text-center">
         <p className="text-xs font-medium uppercase tracking-widest text-emerald-700 dark:text-emerald-400">
-          ⚡ For Volvo BEV & PHEV owners
+          ⚡ For Volvo BEV &amp; PHEV owners
         </p>
         <h1 className="mt-3 text-4xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50 sm:text-5xl">
           Your Volvo&apos;s charging, in one quiet dashboard.

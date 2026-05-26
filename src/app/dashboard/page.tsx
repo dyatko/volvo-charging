@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
@@ -11,6 +12,14 @@ import { RefreshButton } from "@/components/refresh-button";
 import { AutoRefresh } from "@/components/auto-refresh";
 import { DangerZone } from "@/components/danger-zone";
 
+// Per-user state — never something a search engine should serve. robots.txt
+// already disallows /dashboard, but a misbehaving crawler that follows a
+// direct link still needs the page-level signal.
+export const metadata: Metadata = {
+  title: "Dashboard — EV Charging History",
+  robots: { index: false, follow: false, nocache: true },
+};
+
 function fmtSessionDuration(startedAt: Date, endedAt: Date | null): string {
   const end = endedAt ?? new Date();
   const minutes = Math.max(0, Math.round((end.getTime() - startedAt.getTime()) / 60_000));
@@ -23,6 +32,30 @@ function fmtSessionDuration(startedAt: Date, endedAt: Date | null): string {
 function fmtCoord(lat: number | null, lng: number | null): string | null {
   if (lat == null || lng == null) return null;
   return `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+}
+
+function MapLink({
+  lat,
+  lng,
+  label,
+  className,
+}: {
+  lat: number;
+  lng: number;
+  label: string;
+  className?: string;
+}) {
+  return (
+    <a
+      href={`https://www.google.com/maps?q=${lat},${lng}`}
+      target="_blank"
+      rel="noopener noreferrer"
+      className={className ?? "underline-offset-2 hover:underline"}
+      title="Open in Google Maps"
+    >
+      {label}
+    </a>
+  );
 }
 
 export const dynamic = "force-dynamic";
@@ -198,7 +231,12 @@ export default async function DashboardPage() {
         {active.currentLat != null && active.currentLng != null ? (
           <p className="font-mono text-xs tabular-nums text-zinc-500">
             <span aria-hidden>📍</span>{" "}
-            {active.currentLat.toFixed(5)}, {active.currentLng.toFixed(5)}
+            <MapLink
+              lat={active.currentLat}
+              lng={active.currentLng}
+              label={`${active.currentLat.toFixed(5)}, ${active.currentLng.toFixed(5)}`}
+              className="underline-offset-2 hover:underline hover:text-zinc-700 dark:hover:text-zinc-300"
+            />
           </p>
         ) : null}
         <p className="text-xs text-zinc-500">
@@ -220,8 +258,8 @@ export default async function DashboardPage() {
         ) : (
           <ul className="mt-2 space-y-2">
             {sessionRows.map((s) => {
-              const startLoc = fmtCoord(s.startLat, s.startLng);
-              const endLoc = fmtCoord(s.endLat, s.endLng);
+              const startLocLabel = fmtCoord(s.startLat, s.startLng);
+              const endLocLabel = fmtCoord(s.endLat, s.endLng);
               // For an in-progress session, compute live SOC + energy from the
               // latest snapshot rather than waiting for the close to populate them.
               const liveSoc = s.isOpen ? latest?.soc ?? null : null;
@@ -263,11 +301,31 @@ export default async function DashboardPage() {
                       ) : null}
                     </div>
                   </div>
-                  {startLoc || endLoc ? (
+                  {startLocLabel || endLocLabel ? (
                     <p className="mt-2 text-xs text-zinc-500">
-                      {startLoc ? <>start {startLoc}</> : null}
-                      {startLoc && endLoc ? " · " : null}
-                      {endLoc ? <>end {endLoc}</> : null}
+                      {startLocLabel && s.startLat != null && s.startLng != null ? (
+                        <>
+                          start{" "}
+                          <MapLink
+                            lat={s.startLat}
+                            lng={s.startLng}
+                            label={startLocLabel}
+                            className="underline-offset-2 hover:underline hover:text-zinc-700 dark:hover:text-zinc-300"
+                          />
+                        </>
+                      ) : null}
+                      {startLocLabel && endLocLabel ? " · " : null}
+                      {endLocLabel && s.endLat != null && s.endLng != null ? (
+                        <>
+                          end{" "}
+                          <MapLink
+                            lat={s.endLat}
+                            lng={s.endLng}
+                            label={endLocLabel}
+                            className="underline-offset-2 hover:underline hover:text-zinc-700 dark:hover:text-zinc-300"
+                          />
+                        </>
+                      ) : null}
                     </p>
                   ) : null}
                 </li>

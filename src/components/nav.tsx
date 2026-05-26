@@ -1,12 +1,19 @@
 import Link from "next/link";
 import { VehicleSwitcher } from "@/components/vehicle-switcher";
+import { ChargingLogo } from "@/components/charging-logo";
 import type { VehicleRow } from "@/lib/userVehicle";
 
 type Props =
   | { signedIn: false }
-  | { signedIn: true; vehicles: VehicleRow[]; activeVin: string | null };
+  | {
+      signedIn: true;
+      vehicles: VehicleRow[];
+      activeVin: string | null;
+      activeSoc: number | null;
+    };
 
 export function Nav(props: Props) {
+  const soc = props.signedIn ? props.activeSoc : null;
   return (
     <header className="sticky top-0 z-10 px-4 pt-3 pb-1">
       <div
@@ -17,9 +24,17 @@ export function Nav(props: Props) {
       >
         <Link
           href={props.signedIn ? "/dashboard" : "/"}
-          className="whitespace-nowrap text-sm font-semibold tracking-tight"
+          className="group flex items-center gap-2 whitespace-nowrap font-mono text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-900 dark:text-zinc-100"
         >
-          ⚡ EV Charging History
+          <ChargingLogo
+            soc={props.signedIn ? soc : null}
+            state={props.signedIn ? undefined : "high"}
+            title="Charging status"
+            className="h-[18px] w-[18px] shrink-0 -translate-y-[1px]"
+          />
+          <span>
+            EV<span className="mx-[0.35em] text-zinc-400 dark:text-zinc-600">·</span>Charging<span className="ml-[0.4em] font-normal tracking-[0.18em] text-zinc-500 dark:text-zinc-400">History</span>
+          </span>
         </Link>
         {props.signedIn ? (
           <div className="flex flex-1 items-center justify-end gap-1 text-sm text-zinc-600 dark:text-zinc-400">
