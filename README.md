@@ -113,6 +113,8 @@ until you paste a fresh one. Treat this as a demo path; publish the app for unat
 
 Sessions don't exist in the API. We poll Energy state every minute, write a `state_snapshots` row when **any** observable field changes, then derive `charging_sessions` on each transition: a `DISCONNECTED → CONNECTED*` flip opens a row (+ fetches location for `start_lat/lng`); the reverse closes it (+ fetches `end_lat/lng`, computes `energy_kwh` from SOC delta × pack capacity).
 
+A "session" here is the **plug interval**, not the active-charging interval. The session opens when the cable goes in and stays open until it comes out — `chargingStatus` (IDLE / CHARGING / DONE) does not trigger a transition. So a charge that hits the target SOC and pauses, or gets load-balanced, remains one session for the whole plug-in time. This matches what humans usually mean by "this charge" and prevents fragmenting one physical session into many when the car briefly stops drawing power.
+
 ## Important caveats
 
 - **Public regions**: EU/MEA + US/CA/LatAm only. Asia/Pacific is unsupported.

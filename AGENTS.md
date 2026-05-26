@@ -46,6 +46,7 @@ drizzle.config.ts
 - **Dedup on change.** A new `state_snapshots` row is only written when at least one observable field actually changed since the previous row. Unique index on `(vin, observed_at)` enforces it.
 - **Rate budget.** 100 req/min per (Volvo ID, client ID). Default polling cadence is 1/min/VIN — Location is called only on session-boundary transitions, never on every poll.
 - **Charging sessions are derived.** They are written from `state_snapshots` transitions and can be rebuilt end-to-end. Location is the one exception (Location API only returns current position), so `*_lat/lng` columns are captured at transition time, not regenerable.
+- **Sessions are plug intervals, not charge intervals.** A session opens on DISCONNECTED → CONNECTED* and closes on CONNECTED* → DISCONNECTED. `chargingStatus` (IDLE / CHARGING / DONE) does *not* trigger a transition: a session that hits target SOC and pauses, or that gets load-balanced, stays one session for the whole plug interval. This matches what humans mean by "this charge."
 - **No secrets in code or images.** `.env*` is gitignored. In production, secrets come from Google Secret Manager.
 
 ## Common tasks

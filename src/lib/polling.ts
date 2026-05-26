@@ -155,6 +155,14 @@ export async function pollOne(opts: {
   await db.insert(stateSnapshots).values(next).onConflictDoNothing();
 
   // Derive session transitions.
+  //
+  // A "charging session" here is the *plug interval*: it opens when the cable
+  // goes in (DISCONNECTED → CONNECTED*) and closes when it comes out
+  // (CONNECTED* → DISCONNECTED). chargingStatus (IDLE / CHARGING / DONE) is
+  // intentionally NOT a transition trigger — a session that pauses (load
+  // balancing, scheduled charging, hitting target SOC and resuming after
+  // someone unlocks the door) stays a single session for the whole plug
+  // interval, which is what humans usually mean when they say "this charge."
   const wasConnected = isConnected(prev?.connectionStatus ?? null);
   const isConn = isConnected(next.connectionStatus);
 
