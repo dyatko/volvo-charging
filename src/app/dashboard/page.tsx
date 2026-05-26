@@ -8,9 +8,9 @@ import { chargingSessions, stateSnapshots } from "@/db/schema";
 import { getSession } from "@/lib/session";
 import { loadUserContext } from "@/lib/userVehicle";
 import { pollAllVehicles } from "@/lib/polling";
-import { RefreshButton } from "@/components/refresh-button";
 import { AutoRefresh } from "@/components/auto-refresh";
 import { DangerZone } from "@/components/danger-zone";
+import { RelativeTime } from "@/components/relative-time";
 
 // Per-user state — never something a search engine should serve. robots.txt
 // already disallows /dashboard, but a misbehaving crawler that follows a
@@ -80,14 +80,9 @@ const friendly: Record<string, string> = {
   FAULT: "Fault",
 };
 
-function fmtRelative(d: Date | string | null): string | null {
+function toIso(d: Date | string | null | undefined): string | null {
   if (!d) return null;
-  const t = typeof d === "string" ? Date.parse(d) : d.getTime();
-  const sec = Math.floor((Date.now() - t) / 1000);
-  if (sec < 60) return `${sec}s ago`;
-  if (sec < 3600) return `${Math.floor(sec / 60)}m ago`;
-  if (sec < 86400) return `${Math.floor(sec / 3600)}h ago`;
-  return `${Math.floor(sec / 86400)}d ago`;
+  return typeof d === "string" ? d : d.toISOString();
 }
 
 function Pill({ label }: { label: string }) {
@@ -264,15 +259,12 @@ export default async function DashboardPage() {
           </p>
         ) : null}
         <p className="text-xs text-zinc-500">
-          Updated {fmtRelative(active.lastSeenAt ?? latest?.observedAt ?? null) ?? "—"}
+          Updated <RelativeTime iso={toIso(active.lastSeenAt ?? latest?.observedAt ?? null)} />
         </p>
       </section>
 
       <section className="mt-6">
-        <div className="flex items-center justify-between gap-3">
-          <h2 className="text-sm font-semibold tracking-tight">Charging sessions</h2>
-          <RefreshButton />
-        </div>
+        <h2 className="text-sm font-semibold tracking-tight">Charging sessions</h2>
         {sessionRows.length === 0 ? (
           <div className="mt-2 rounded-xl border border-dashed border-zinc-300 p-5 text-center text-xs text-zinc-500 dark:border-zinc-700">
             No sessions yet. Plug the car in (or hit{" "}
