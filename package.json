@@ -24,6 +24,7 @@
     "next": "16.2.6",
     "next-auth": "^4.24.14",
     "openapi-fetch": "^0.17.0",
+    "openid-client": "^6.8.4",
     "p-limit": "^7.3.0",
     "pg": "^8.21.0",
     "react": "19.2.4",
