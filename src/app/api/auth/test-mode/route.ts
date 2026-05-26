@@ -5,15 +5,16 @@ import { db } from "@/db/client";
 import { users, volvoCredentials, volvoTokens } from "@/db/schema";
 import { encrypt } from "@/lib/crypto";
 import { getSession } from "@/lib/session";
-import { upsertSingleVehicle } from "@/lib/vehicleBootstrap";
+import { bootstrapVehiclesFromConve } from "@/lib/vehicleBootstrap";
 
 // Each token is the access_token from a separate test-access-token page
 // in Volvo's developer portal (one per API).
+// Conve token is required — we use it to list VINs via Connected Vehicle so
+// the user never types one.
 const FormSchema = z.object({
   vccApiKey: z.string().min(20, "vcc-api-key must be 20+ chars"),
-  vin: z.string().min(11, "VIN is required when using test tokens").max(20),
   energyToken: z.string().min(40, "Energy API token is required"),
-  conveToken: z.string().optional(),
+  conveToken: z.string().min(40, "Connected Vehicle API token is required (we use it to list your VINs)"),
   locationToken: z.string().optional(),
 });
 
@@ -45,9 +46,8 @@ export async function POST(req: Request) {
   const form = await req.formData();
   const parsed = FormSchema.safeParse({
     vccApiKey: form.get("vccApiKey"),
-    vin: form.get("vin"),
     energyToken: form.get("energyToken"),
-    conveToken: form.get("conveToken") || undefined,
+    conveToken: form.get("conveToken"),
     locationToken: form.get("locationToken") || undefined,
   });
   if (!parsed.success) {
@@ -57,18 +57,15 @@ export async function POST(req: Request) {
     );
   }
 
-  const { vccApiKey, vin, energyToken, conveToken, locationToken } = parsed.data;
+  const { vccApiKey, energyToken, conveToken, locationToken } = parsed.data;
 
-  // Identity: pick whichever JWT we have. Volvo issues one sub per Volvo ID,
-  // so any of them yields the same sub.
+  // Identity: pick any JWT (they all share the same Volvo ID sub).
   const volvoSub =
-    decodeJwtSub(energyToken) ??
-    (conveToken ? decodeJwtSub(conveToken) : null) ??
-    (locationToken ? decodeJwtSub(locationToken) : null);
+    decodeJwtSub(energyToken) ?? decodeJwtSub(conveToken) ?? (locationToken ? decodeJwtSub(locationToken) : null);
   const externalIdSentinel = volvoSub ? `volvo:${volvoSub}` : null;
 
   const energyExpiresAt = decodeJwtExp(energyToken);
-  const conveExpiresAt = conveToken ? decodeJwtExp(conveToken) : null;
+  const conveExpiresAt = decodeJwtExp(conveToken);
   const locationExpiresAt = locationToken ? decodeJwtExp(locationToken) : null;
 
   const userRow = await db.transaction(async (tx) => {
@@ -102,7 +99,7 @@ export async function POST(req: Request) {
         scope: null,
         energyTokenEnc: encrypt(energyToken),
         energyExpiresAt,
-        conveTokenEnc: conveToken ? encrypt(conveToken) : null,
+        conveTokenEnc: encrypt(conveToken),
         conveExpiresAt,
         locationTokenEnc: locationToken ? encrypt(locationToken) : null,
         locationExpiresAt,
@@ -116,7 +113,7 @@ export async function POST(req: Request) {
           scope: null,
           energyTokenEnc: encrypt(energyToken),
           energyExpiresAt,
-          conveTokenEnc: conveToken ? encrypt(conveToken) : null,
+          conveTokenEnc: encrypt(conveToken),
           conveExpiresAt,
           locationTokenEnc: locationToken ? encrypt(locationToken) : null,
           locationExpiresAt,
@@ -127,11 +124,14 @@ export async function POST(req: Request) {
     return u;
   });
 
-  const { conveError } = await upsertSingleVehicle({
+  // Discover ALL user's VINs via Connected Vehicle.
+  const vins = await bootstrapVehiclesFromConve({
     userId: userRow.id,
-    vin,
-    conveCreds: conveToken ? { accessToken: conveToken, vccApiKey } : null,
+    conveCreds: { accessToken: conveToken, vccApiKey },
   });
+  const conveError = vins.length === 0
+    ? "Connected Vehicle returned no vehicles for this token"
+    : null;
 
   const session = await getSession();
   session.userId = userRow.id;

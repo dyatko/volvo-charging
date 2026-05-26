@@ -6,7 +6,6 @@ const KEY = "volvo-charging.test-token-form";
 
 type Stored = {
   vccApiKey: string;
-  vin: string;
   energyToken: string;
   conveToken: string;
   locationToken: string;
@@ -14,7 +13,6 @@ type Stored = {
 
 const empty: Stored = {
   vccApiKey: "",
-  vin: "",
   energyToken: "",
   conveToken: "",
   locationToken: "",
@@ -36,7 +34,6 @@ export function TestTokenForm() {
     const fd = new FormData(e.currentTarget);
     const next: Stored = {
       vccApiKey: String(fd.get("vccApiKey") ?? ""),
-      vin: String(fd.get("vin") ?? ""),
       energyToken: String(fd.get("energyToken") ?? ""),
       conveToken: String(fd.get("conveToken") ?? ""),
       locationToken: String(fd.get("locationToken") ?? ""),
@@ -55,31 +52,30 @@ export function TestTokenForm() {
       onSubmit={persist}
       className="mt-4 space-y-4 rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-950"
     >
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <label className="block">
-          <span className="text-sm font-medium">VCC API key (Primary)</span>
-          <input
-            required
-            name="vccApiKey"
-            autoComplete="off"
-            defaultValue={v.vccApiKey}
-            key={`vcc-${v.vccApiKey}`}
-            className="mt-1 block w-full rounded-md border border-zinc-300 bg-white px-3 py-2 font-mono text-xs dark:border-zinc-700 dark:bg-zinc-900"
-          />
-        </label>
-        <label className="block">
-          <span className="text-sm font-medium">VIN</span>
-          <input
-            required
-            name="vin"
-            placeholder="YV1..."
-            defaultValue={v.vin}
-            key={`vin-${v.vin}`}
-            className="mt-1 block w-full rounded-md border border-zinc-300 bg-white px-3 py-2 font-mono text-xs dark:border-zinc-700 dark:bg-zinc-900"
-          />
-        </label>
-      </div>
+      <label className="block">
+        <span className="text-sm font-medium">VCC API key (Primary)</span>
+        <input
+          required
+          name="vccApiKey"
+          autoComplete="off"
+          defaultValue={v.vccApiKey}
+          key={`vcc-${v.vccApiKey}`}
+          className="mt-1 block w-full rounded-md border border-zinc-300 bg-white px-3 py-2 font-mono text-xs dark:border-zinc-700 dark:bg-zinc-900"
+        />
+      </label>
 
+      <TokenField
+        name="conveToken"
+        label="Connected Vehicle API token"
+        required
+        link={{
+          href: "https://developer.volvocars.com/apis/connected-vehicle/v2/overview/",
+          label: "Connected Vehicle API docs → Test access tokens",
+        }}
+        scopes="conve:vehicle_relation"
+        hint="We use this to list your VINs and fetch model / battery / photo."
+        initial={v.conveToken}
+      />
       <TokenField
         name="energyToken"
         label="Energy API token"
@@ -90,17 +86,6 @@ export function TestTokenForm() {
         }}
         scopes="energy:state:read, energy:capability:read"
         initial={v.energyToken}
-      />
-      <TokenField
-        name="conveToken"
-        label="Connected Vehicle API token"
-        link={{
-          href: "https://developer.volvocars.com/apis/connected-vehicle/v2/overview/",
-          label: "Connected Vehicle API docs → Test access tokens",
-        }}
-        scopes="conve:vehicle_relation"
-        hint="Optional. Enables model name, battery capacity, and the car photo."
-        initial={v.conveToken}
       />
       <TokenField
         name="locationToken"

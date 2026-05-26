@@ -110,7 +110,8 @@ function TestTokenIntro() {
       <p className="mt-3 text-zinc-600 dark:text-zinc-400">
         Volvo's portal issues a separate test access token <em>per API</em>. Generate one
         from each API's <strong>Test access tokens</strong> page (linked next to each
-        field), pair them all with the <strong>same VIN</strong>, then paste below.
+        field), then paste below. The Connected Vehicle token discovers your VINs — you
+        don't need to type any.
       </p>
       <p className="mt-2 text-xs text-amber-700 dark:text-amber-400">
         Test tokens expire after 30 minutes and have no refresh. Polling stops working until
