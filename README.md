@@ -4,16 +4,21 @@ A mobile-first PWA where Volvo owners sign in and see their car's **current char
 
 > Brand: this is the user-visible name. The repository, Cloud Run service, Artifact Registry repo, and Cloud SQL instance keep the internal identifier `volvo-charging` so the existing WIF binding, secrets, and infra references don't have to change.
 
-Currently in Phase 1: a local-first vertical slice that server-renders live Energy state for a given VIN using developer-portal credentials.
+Live at **https://ev.marat.online** (Cloud Run, `europe-north1`).
 
 ## What works today
 
-- `GET /dashboard` server-renders the current Energy API state for a single VIN: battery %, range, plug/charging status, target SOC, power, ETA-to-target.
+- One-page dashboard at `/dashboard`: SOC ring + target overlay, plug / charging / connection-type pills, range, charging power (W → kW normalised), live coordinates (📍 lat,lng) folded into the state card, auto-refresh every 15 s while the tab is visible. Below it: reverse-chronological session list with in-progress kWh + SOC computed on the fly.
+- Vehicle switcher in the header when the user owns more than one VIN; single-vehicle users see no chrome.
+- Two sign-in paths: real OAuth 2.0 + PKCE via `openid-client` (recommended once your Volvo developer app is Published), and a test-token mode for pre-publish development where each Volvo API issues its own access token.
 - Typed clients for **three** Volvo APIs generated from vendored OpenAPI specs:
   - **Energy API v2** (`state` + `capabilities`)
-  - **Connected Vehicle v2** (only `GET /vehicles` and `GET /vehicles/{vin}` used; rest of the surface available via generated types)
+  - **Connected Vehicle v2** (`GET /vehicles`, `GET /vehicles/{vin}` — full surface available via generated types if needed later)
   - **Location v1** (`GET /v1/vehicles/{vin}/location` — GeoJSON Point)
-- Drizzle schema + initial migration for users, encrypted credential storage, vehicles, append-only `state_snapshots`, and derived `charging_sessions` with start/end coordinates.
+- Every Volvo call goes through `src/lib/volvo/retry.ts`: exponential backoff + full jitter + `Retry-After` for 429/5xx, capped at 4 attempts.
+- Drizzle schema + 4 migrations: users (with `active_vin`), encrypted credential storage (AES-256-GCM), refreshable Volvo tokens + per-API test-token slots, vehicles (model / year / battery / photos / live location), append-only `state_snapshots`, derived `charging_sessions` with start/end coordinates.
+- GDPR endpoints: `POST /api/account/delete` (revokes refresh token at Volvo, then cascade-drops every row), `GET /api/account/export` (full JSON dump), `DELETE /api/vehicles/[vin]` (disconnect a single car).
+- Privacy + Terms pages at `/privacy`, `/terms`. Site-wide footer disclaimer (*Not affiliated with AB Volvo / Volvo Car Group / Volvo Car USA LLC*). SEO landing at `/` with OG tags + JSON-LD `WebApplication`. `robots.txt` and `sitemap.xml` are generated.
 
 ## What's next
 
@@ -22,12 +27,13 @@ Currently in Phase 1: a local-first vertical slice that server-renders live Ener
 | ✅ 1 | Local-first vertical slice: BYOC OAuth (auth-code + PKCE) via `openid-client`, Connected Vehicle bootstrap, Energy state polling on demand, session derivation with Location |
 | ✅ 2 | GitHub Actions CI: lint, typecheck, test, codegen-drift gate, Deploy workflow with WIF auth |
 | ✅ 3 | Pre-publish hardening: 429 + Retry-After backoff, sign-out revokes Volvo refresh token, GDPR endpoints (delete account, export, disconnect vehicle), privacy + terms pages, SEO-ready landing page, rebrand to *EV Charging History* |
-| 🛠 4 | Cloud Run + Cloud SQL (`db-f1-micro` Enterprise edition, europe-north1) + Artifact Registry + Secret Manager + WIF — `infra/bootstrap.sh` provisions everything; running it now |
-| ⏳ 5 | First Cloud Run deploy through GHA + `infra/scheduler.sh` to activate the 1-min server-side tick (independent of any browser session) |
-| ⏳ 6 | PWA polish: install prompt, offline shell for `/dashboard`, Web Push notifications on session-close events |
-| ⏳ 7 | Submit the OAuth app for Volvo publish review → drop the BYOC onboarding when approved, map a custom domain (`gcloud beta run domain-mappings create`) |
+| ✅ 4 | Cloud Run + Cloud SQL (`db-f1-micro` Enterprise edition, europe-north1) + Artifact Registry + Secret Manager + WIF — provisioned by `infra/bootstrap.sh` |
+| ✅ 5 | First production deploy through GHA. pnpm 11 with supply-chain `minimumReleaseAge=24h` enforced both locally and in the container. Custom domain `ev.marat.online` mapped (managed TLS) |
+| ⏳ 6 | `infra/scheduler.sh` to activate the 1-min server-side tick (independent of any browser session) |
+| ⏳ 7 | PWA polish: install prompt, offline shell for `/dashboard`, Web Push notifications on session-close events |
+| ⏳ 8 | Submit the OAuth app for Volvo publish review → drop the BYOC onboarding when approved |
 
-Full plan: `~/.claude/plans/i-want-to-build-zippy-sparkle.md`.
+Full plan / design notes: `~/.claude/plans/i-want-to-build-zippy-sparkle.md`.
 
 ## Quick start (local)
 
@@ -122,7 +128,7 @@ A "session" here is the **plug interval**, not the active-charging interval. The
 
 - **Public regions**: EU/MEA + US/CA/LatAm only. Asia/Pacific is unsupported.
 - **Supported cars**: BEVs (EX30/EX40/EX90) + recent PHEVs (XC60/S90/V90 MY2022+, XC90/S60/V60 MY2023+).
-- **Rate limit**: 100 req/min per (Volvo ID, client ID). We use ~1/min/VIN steady-state, well under.
+- **Rate limit**: 100 req/min per (Volvo ID, client ID) **and** a 10 000 req/day per-app quota. We poll Energy state every minute, call Location only on observable-state changes, and wrap every call in exponential backoff that respects `Retry-After`.
 - **Publish approval**: a true "Sign in with Volvo ID" experience requires Volvo to approve a Published app. Until then, the BYOC mode asks each user to plug in their own Volvo developer client ID/secret/api-key.
 - **Per-field statuses**: each Energy property is independently `OK` or `ERROR`. Capabilities can falsely claim support — handle per-field errors in UI.
 - **Stale fields**: every property has its own `updatedAt`; the response is not "now". A parked car can have a 4-month-old `chargingCurrentLimit` alongside a minute-old SOC.
@@ -190,13 +196,37 @@ No GitHub *secrets* are needed.
 Push any commit to `main`. The [`Deploy` workflow](./.github/workflows/deploy.yml):
 
 1. Authenticates as `deployer@` via WIF.
-2. Builds the multi-stage Docker image and pushes to Artifact Registry (tagged `:${sha}` and `:latest`).
+2. Builds the multi-stage Docker image (`pnpm@11.3.0` enforced via `corepack` + the `packageManager` field — the in-container build also runs under `minimumReleaseAge=24h`) and pushes to Artifact Registry tagged `:${sha}` and `:latest`.
 3. Spawns `cloud-sql-proxy` on the runner, connects drizzle-kit through `127.0.0.1:5432`, runs migrations against Cloud SQL.
-4. Deploys a no-traffic revision with `--add-cloudsql-instances=<instance>` so the runtime gets a Unix socket at `/cloudsql/<instance>`. `DATABASE_URL` from Secret Manager points there.
-5. Curls `/api/healthz` on the service URL.
-6. Flips 100% traffic to the new revision.
+4. `gcloud run deploy` — single shot. `--add-cloudsql-instances=<instance>` so the runtime gets a Unix socket at `/cloudsql/<instance>`, `--cpu-boost` for faster cold starts, `--max-instances=2` as a cost guard-rail, every secret mounted from Secret Manager (`DATABASE_URL`, `SESSION_SECRET`, `DATA_ENCRYPTION_KEK`). Cloud Run does atomic revision swaps — if the new revision fails to become Ready, the previous one keeps serving.
+5. Curls `/api/healthz` on the service URL as a smoke test.
 
-### 4. Per-minute tick
+If a deploy ever regresses, roll back with one line:
+```bash
+gcloud run services update-traffic volvo-charging \
+  --region=europe-north1 --to-revisions=<prev-revision>=100
+```
+
+### 4. Custom domain (optional)
+
+Already done for `ev.marat.online`. To map your own:
+
+```bash
+gcloud beta run domain-mappings create \
+  --service=volvo-charging \
+  --domain=<your.domain> \
+  --region=europe-north1
+```
+
+`gcloud` prints the DNS records to add at your registrar (usually a `CNAME` to `ghs.googlehosted.com.` for a subdomain). Once DNS propagates, Google provisions a managed TLS cert automatically (~minutes). Then set the canonical URL so the OG tags + sitemap point at the real domain:
+
+```bash
+gcloud run services update volvo-charging \
+  --region=europe-north1 \
+  --update-env-vars=NEXT_PUBLIC_SITE_URL=https://<your.domain>
+```
+
+### 5. Per-minute tick
 
 After the first deploy succeeds:
 
