@@ -140,25 +140,35 @@ export default async function DashboardPage() {
       ) : null}
 
       <header className="mb-5 flex items-start justify-between gap-3">
-        <div>
+        <div className="min-w-0">
           <h1 className="text-xl font-semibold tracking-tight">
-            {active.model ?? "Your Volvo"}
+            {active.model ? `Volvo ${active.model}` : "Volvo"}
             {active.modelYear ? (
-              <span className="ml-1 text-zinc-500">·{active.modelYear}</span>
+              <span className="ml-1 font-normal text-zinc-500">· {active.modelYear}</span>
             ) : null}
           </h1>
-          <p className="break-all font-mono text-xs text-zinc-500">
-            {active.vin}
-            {active.externalColour ? <span className="ml-2">· {active.externalColour}</span> : null}
-          </p>
+          {(() => {
+            const bits = [
+              active.externalColour,
+              active.upholstery,
+              active.fuelType,
+              active.gearbox,
+              active.steering ? `${active.steering}-hand drive` : null,
+              active.batteryCapacityKwh ? `${active.batteryCapacityKwh} kWh battery` : null,
+            ].filter(Boolean) as string[];
+            return bits.length ? (
+              <p className="mt-0.5 text-xs text-zinc-500">{bits.join(" · ")}</p>
+            ) : null;
+          })()}
+          <p className="mt-0.5 break-all font-mono text-xs text-zinc-500">{active.vin}</p>
         </div>
         {active.exteriorImageUrl ? (
           <Image
             src={active.exteriorImageUrl}
-            alt="Vehicle"
-            width={80}
-            height={48}
-            className="h-12 w-20 rounded object-cover"
+            alt={active.model ? `${active.model} exterior` : "Vehicle exterior"}
+            width={120}
+            height={72}
+            className="h-16 w-24 shrink-0 rounded object-cover"
             unoptimized
           />
         ) : null}

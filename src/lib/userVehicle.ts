@@ -12,7 +12,11 @@ export type VehicleRow = {
   fuelType: string | null;
   externalColour: string | null;
   batteryCapacityKwh: number | null;
+  gearbox: string | null;
+  upholstery: string | null;
+  steering: string | null;
   exteriorImageUrl: string | null;
+  internalImageUrl: string | null;
   currentLat: number | null;
   currentLng: number | null;
   locationUpdatedAt: Date | null;
@@ -140,7 +144,11 @@ export async function loadUserContext(userId: string): Promise<UserContext | nul
       fuelType: vehicles.fuelType,
       externalColour: vehicles.externalColour,
       batteryCapacityKwh: vehicles.batteryCapacityKwh,
+      gearbox: vehicles.gearbox,
+      upholstery: vehicles.upholstery,
+      steering: vehicles.steering,
       exteriorImageUrl: vehicles.exteriorImageUrl,
+      internalImageUrl: vehicles.internalImageUrl,
       currentLat: vehicles.currentLat,
       currentLng: vehicles.currentLng,
       locationUpdatedAt: vehicles.locationUpdatedAt,

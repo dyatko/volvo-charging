@@ -71,7 +71,11 @@ export const vehicles = pgTable(
     fuelType: text("fuel_type"),
     externalColour: text("external_colour"),
     batteryCapacityKwh: real("battery_capacity_kwh"),
+    gearbox: text("gearbox"),
+    upholstery: text("upholstery"),
+    steering: text("steering"),
     exteriorImageUrl: text("exterior_image_url"),
+    internalImageUrl: text("internal_image_url"),
     capabilitiesJson: jsonb("capabilities_json"),
     // Last-known location, refreshed on every poll when a Location token is available.
     currentLat: doublePrecision("current_lat"),
