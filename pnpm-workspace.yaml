@@ -8,3 +8,16 @@ onlyBuiltDependencies:
   - esbuild
   - sharp
   - unrs-resolver
+# Patch transitive deps flagged by Dependabot. All three are dev/build-time
+# tools or use unreachable code paths in our runtime; overriding to the
+# patched versions keeps the alert list clean.
+#   uuid: next-auth pins v8.3.2 (bounds check in v3/v5/v6 — next-auth only
+#     calls v4, but Dependabot doesn't know that). v11.1.1 keeps dual
+#     CJS/ESM exports so next-auth's `require("uuid")` still works.
+#   postcss: next ships 8.4.31 (XSS via </style> in stringify output).
+#   esbuild: drizzle-kit's deprecated @esbuild-kit/* tree carries 0.18.20
+#     (dev-server CORS bypass). 0.25.0+ patches it.
+overrides:
+  uuid: "^11.1.1"
+  postcss: "^8.5.10"
+  esbuild: ">=0.25.0"
