@@ -8,6 +8,7 @@ import { getSession } from "@/lib/session";
 import { loadUserContext } from "@/lib/userVehicle";
 import { pollAllVehicles } from "@/lib/polling";
 import { RefreshButton } from "@/components/refresh-button";
+import { AutoRefresh } from "@/components/auto-refresh";
 
 export const dynamic = "force-dynamic";
 
@@ -130,6 +131,7 @@ export default async function DashboardPage() {
 
   return (
     <main className="mx-auto w-full max-w-md flex-1 px-4 py-6">
+      <AutoRefresh />
       {!energyCreds ? (
         <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-700 dark:bg-amber-900/20 dark:text-amber-200">
           Your Energy API token has expired or is missing. Showing the last cached snapshot.
