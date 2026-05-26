@@ -9,14 +9,17 @@
 set -euo pipefail
 
 PROJECT_ID="volvocharging"        # must match infra/bootstrap.sh
-REGION="europe-north1"
+RUN_REGION="europe-north1"        # where Cloud Run + Cloud SQL live
+# Cloud Scheduler isn't available in europe-north1, so the cron job lives in
+# europe-west1 (Belgium). Cross-region HTTP for a 1/min trigger is fine.
+SCHEDULER_REGION="europe-west1"
 SERVICE="volvo-charging"
 
 gcloud config set project "$PROJECT_ID"
 
-SERVICE_URL=$(gcloud run services describe "$SERVICE" --region="$REGION" --format='value(status.url)')
+SERVICE_URL=$(gcloud run services describe "$SERVICE" --region="$RUN_REGION" --format='value(status.url)')
 if [ -z "$SERVICE_URL" ]; then
-  echo "Cloud Run service '$SERVICE' not found in $REGION. Deploy first."
+  echo "Cloud Run service '$SERVICE' not found in $RUN_REGION. Deploy first."
   exit 1
 fi
 echo "→ Service URL: $SERVICE_URL"
@@ -25,15 +28,15 @@ SCHEDULER_SA="scheduler@$PROJECT_ID.iam.gserviceaccount.com"
 
 echo "→ Granting Cloud Run invoker to scheduler SA on this service"
 gcloud run services add-iam-policy-binding "$SERVICE" \
-  --region="$REGION" \
+  --region="$RUN_REGION" \
   --member="serviceAccount:$SCHEDULER_SA" \
   --role="roles/run.invoker" \
   --quiet >/dev/null
 
-echo "→ Upserting tick-1min scheduler job"
-if gcloud scheduler jobs describe tick-1min --location="$REGION" >/dev/null 2>&1; then
+echo "→ Upserting tick-1min scheduler job in $SCHEDULER_REGION"
+if gcloud scheduler jobs describe tick-1min --location="$SCHEDULER_REGION" >/dev/null 2>&1; then
   gcloud scheduler jobs update http tick-1min \
-    --location="$REGION" \
+    --location="$SCHEDULER_REGION" \
     --schedule="* * * * *" \
     --uri="$SERVICE_URL/api/internal/tick" \
     --http-method=POST \
@@ -43,7 +46,7 @@ if gcloud scheduler jobs describe tick-1min --location="$REGION" >/dev/null 2>&1
     --attempt-deadline=120s
 else
   gcloud scheduler jobs create http tick-1min \
-    --location="$REGION" \
+    --location="$SCHEDULER_REGION" \
     --schedule="* * * * *" \
     --uri="$SERVICE_URL/api/internal/tick" \
     --http-method=POST \
