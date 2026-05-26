@@ -145,36 +145,21 @@ function OAuthForm() {
 function TestTokenForm() {
   return (
     <>
-      <details className="mt-4 rounded-lg border border-zinc-200 bg-white p-4 text-sm dark:border-zinc-800 dark:bg-zinc-900" open>
+      <details
+        className="mt-4 rounded-lg border border-zinc-200 bg-white p-4 text-sm dark:border-zinc-800 dark:bg-zinc-900"
+        open
+      >
         <summary className="cursor-pointer font-medium">
           When to use this — unpublished app, just kicking the tires
         </summary>
-        <ol className="mt-3 list-decimal space-y-1.5 pl-5 text-zinc-600 dark:text-zinc-400">
-          <li>
-            Open{" "}
-            <a
-              className="underline"
-              href="https://developer.volvocars.com/apis/docs/test-access-tokens/"
-              target="_blank"
-              rel="noreferrer"
-            >
-              developer.volvocars.com → Test access tokens
-            </a>
-            .
-          </li>
-          <li>
-            Select your application and check all of: <code className="text-xs">openid</code>,{" "}
-            <code className="text-xs">energy:state:read</code>,{" "}
-            <code className="text-xs">energy:capability:read</code>,{" "}
-            <code className="text-xs">conve:vehicle_relation</code>,{" "}
-            <code className="text-xs">location:read</code>.
-          </li>
-          <li>Pair the token with <strong>your own VIN</strong>, not the demo car, so Connected Vehicle and Location return real data.</li>
-          <li>Copy the access token and the VCC API key (Primary) from the application page.</li>
-        </ol>
+        <p className="mt-3 text-zinc-600 dark:text-zinc-400">
+          Volvo's portal issues a separate test access token <em>per API</em>. Generate one
+          from each API's <strong>Test access tokens</strong> page (linked next to each
+          field), pair them all with the <strong>same VIN</strong>, then paste below.
+        </p>
         <p className="mt-2 text-xs text-amber-700 dark:text-amber-400">
-          Test tokens expire after 30 minutes and there's no refresh token. Polling will stop
-          working until you paste a fresh one. Publish the app to get real OAuth.
+          Test tokens expire after 30 minutes and have no refresh. Polling stops working until
+          you paste a fresh set. Publish the app to get real OAuth + automatic refresh.
         </p>
       </details>
 
@@ -183,43 +168,109 @@ function TestTokenForm() {
         method="POST"
         className="mt-4 space-y-4 rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-950"
       >
-        <label className="block">
-          <span className="text-sm font-medium">Access token</span>
-          <textarea
-            required
-            name="accessToken"
-            rows={3}
-            placeholder="eyJhbGciOi..."
-            className="mt-1 block w-full rounded-md border border-zinc-300 bg-white px-3 py-2 font-mono text-xs dark:border-zinc-700 dark:bg-zinc-900"
-          />
-        </label>
-        <label className="block">
-          <span className="text-sm font-medium">VCC API key (Primary)</span>
-          <input
-            required
-            name="vccApiKey"
-            autoComplete="off"
-            className="mt-1 block w-full rounded-md border border-zinc-300 bg-white px-3 py-2 font-mono text-xs dark:border-zinc-700 dark:bg-zinc-900"
-          />
-        </label>
-        <label className="block">
-          <span className="text-sm font-medium">VIN <span className="text-zinc-500">(optional)</span></span>
-          <input
-            name="vin"
-            placeholder="YV1..."
-            className="mt-1 block w-full rounded-md border border-zinc-300 bg-white px-3 py-2 font-mono text-xs dark:border-zinc-700 dark:bg-zinc-900"
-          />
-          <span className="mt-1 block text-xs text-zinc-500">
-            Leave empty to use the first VIN your token's scopes can see.
-          </span>
-        </label>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <label className="block">
+            <span className="text-sm font-medium">VCC API key (Primary)</span>
+            <input
+              required
+              name="vccApiKey"
+              autoComplete="off"
+              className="mt-1 block w-full rounded-md border border-zinc-300 bg-white px-3 py-2 font-mono text-xs dark:border-zinc-700 dark:bg-zinc-900"
+            />
+          </label>
+          <label className="block">
+            <span className="text-sm font-medium">VIN</span>
+            <input
+              required
+              name="vin"
+              placeholder="YV1..."
+              className="mt-1 block w-full rounded-md border border-zinc-300 bg-white px-3 py-2 font-mono text-xs dark:border-zinc-700 dark:bg-zinc-900"
+            />
+          </label>
+        </div>
+
+        <TokenField
+          name="energyToken"
+          label="Energy API token"
+          required
+          link={{
+            href: "https://developer.volvocars.com/apis/energy/v2/overview/",
+            label: "Energy API docs → Test access tokens",
+          }}
+          scopes="energy:state:read, energy:capability:read"
+        />
+        <TokenField
+          name="conveToken"
+          label="Connected Vehicle API token"
+          link={{
+            href: "https://developer.volvocars.com/apis/connected-vehicle/v2/overview/",
+            label: "Connected Vehicle API docs → Test access tokens",
+          }}
+          scopes="conve:vehicle_relation"
+          hint="Optional. Enables model name, battery capacity, and the car photo on the dashboard."
+        />
+        <TokenField
+          name="locationToken"
+          label="Location API token"
+          link={{
+            href: "https://developer.volvocars.com/apis/location/v1/overview/",
+            label: "Location API docs → Test access tokens",
+          }}
+          scopes="location:read"
+          hint="Optional. Captures lat/lng on charging-session start and end."
+        />
+
         <button
           type="submit"
           className="w-full rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
         >
-          Connect with test token
+          Connect with test tokens
         </button>
       </form>
     </>
+  );
+}
+
+function TokenField({
+  name,
+  label,
+  link,
+  scopes,
+  required = false,
+  hint,
+}: {
+  name: string;
+  label: string;
+  link: { href: string; label: string };
+  scopes: string;
+  required?: boolean;
+  hint?: string;
+}) {
+  return (
+    <label className="block">
+      <span className="flex items-baseline justify-between gap-2 text-sm font-medium">
+        {label}
+        {required ? null : <span className="text-xs font-normal text-zinc-500">optional</span>}
+      </span>
+      <textarea
+        required={required}
+        name={name}
+        rows={3}
+        placeholder="eyJhbGciOi..."
+        className="mt-1 block w-full rounded-md border border-zinc-300 bg-white px-3 py-2 font-mono text-xs dark:border-zinc-700 dark:bg-zinc-900"
+      />
+      <span className="mt-1 block text-xs text-zinc-500">
+        Scopes: <code className="text-[10px]">{scopes}</code>.{" "}
+        <a
+          className="underline"
+          href={link.href}
+          target="_blank"
+          rel="noreferrer"
+        >
+          {link.label}
+        </a>
+        {hint ? ` — ${hint}` : null}
+      </span>
+    </label>
   );
 }

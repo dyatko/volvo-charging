@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db/client";
 import { users, volvoCredentials, volvoTokens, vehicles } from "@/db/schema";
@@ -6,11 +7,14 @@ import { encrypt } from "@/lib/crypto";
 import { getSession } from "@/lib/session";
 import { makeConveClient } from "@/lib/volvo/client";
 
+// Each token is the access_token from a separate test-access-token page
+// in Volvo's developer portal (one per API).
 const FormSchema = z.object({
-  accessToken: z.string().min(40),
-  vccApiKey: z.string().min(20),
-  // Optional — if omitted we use the first VIN returned by Connected Vehicle.
-  vin: z.string().optional(),
+  vccApiKey: z.string().min(20, "vcc-api-key must be 20+ chars"),
+  vin: z.string().min(11, "VIN is required when using test tokens").max(20),
+  energyToken: z.string().min(40, "Energy API token is required"),
+  conveToken: z.string().optional(),
+  locationToken: z.string().optional(),
 });
 
 function decodeJwtSub(jwt: string): string | null {
@@ -18,7 +22,7 @@ function decodeJwtSub(jwt: string): string | null {
     const [, payload] = jwt.split(".");
     if (!payload) return null;
     const json = Buffer.from(payload.replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8");
-    const obj = JSON.parse(json) as { sub?: string; exp?: number };
+    const obj = JSON.parse(json) as { sub?: string };
     return obj.sub ?? null;
   } catch {
     return null;
@@ -40,9 +44,11 @@ function decodeJwtExp(jwt: string): Date {
 export async function POST(req: Request) {
   const form = await req.formData();
   const parsed = FormSchema.safeParse({
-    accessToken: form.get("accessToken"),
     vccApiKey: form.get("vccApiKey"),
-    vin: form.get("vin") || undefined,
+    vin: form.get("vin"),
+    energyToken: form.get("energyToken"),
+    conveToken: form.get("conveToken") || undefined,
+    locationToken: form.get("locationToken") || undefined,
   });
   if (!parsed.success) {
     return NextResponse.json(
@@ -50,62 +56,54 @@ export async function POST(req: Request) {
       { status: 400 },
     );
   }
-  const { accessToken, vccApiKey } = parsed.data;
-  let vin = parsed.data.vin;
 
-  const conve = makeConveClient({ accessToken, vccApiKey });
+  const { vccApiKey, vin, energyToken, conveToken, locationToken } = parsed.data;
 
-  if (!vin) {
-    const { data, error, response } = await conve.GET("/vehicles");
-    if (error || !data?.data?.length) {
-      return NextResponse.json(
-        {
-          ok: false,
-          error:
-            "Could not list vehicles. Check the token, VCC API key, and that the user has `conve:vehicle_relation` scope.",
-          status: response?.status,
-          volvoError: error,
-        },
-        { status: 400 },
-      );
-    }
-    vin = data.data[0].vin;
-  }
-  if (!vin) {
-    return NextResponse.json({ ok: false, error: "No VIN available" }, { status: 400 });
-  }
-
-  // Pull vehicle details (model, batteryCapacityKWH, exteriorImageUrl) so the UI looks good.
-  const { data: details, error: detailsErr } = await conve.GET("/vehicles/{vin}", {
-    params: { path: { vin } },
-  });
-
-  const volvoSub = decodeJwtSub(accessToken);
-  const expiresAt = decodeJwtExp(accessToken);
-
-  // Upsert user keyed by Volvo ID (sub). Email is unknown until id_token flow is wired.
+  // Identity: pick whichever JWT we have. Volvo issues one sub per Volvo ID,
+  // so any of them yields the same sub.
+  const volvoSub =
+    decodeJwtSub(energyToken) ??
+    (conveToken ? decodeJwtSub(conveToken) : null) ??
+    (locationToken ? decodeJwtSub(locationToken) : null);
   const externalIdSentinel = volvoSub ? `volvo:${volvoSub}` : null;
 
-  const result = await db.transaction(async (tx) => {
-    // Try to find an existing user by the Volvo sub stored in users.email column as a fallback
-    // (we don't have a dedicated external_id column yet; revisit when adding real OAuth).
-    let userRow = externalIdSentinel
+  const energyExpiresAt = decodeJwtExp(energyToken);
+  const conveExpiresAt = conveToken ? decodeJwtExp(conveToken) : null;
+  const locationExpiresAt = locationToken ? decodeJwtExp(locationToken) : null;
+
+  // If we have a Connected Vehicle token, fetch model/photo/battery details up
+  // front. Otherwise the vehicle row is populated with VIN only — the UI will
+  // show a more spartan dashboard until the user supplies a Conve token later.
+  let details:
+    | {
+        descriptions?: { model?: string };
+        modelYear?: number;
+        fuelType?: string;
+        externalColour?: string;
+        batteryCapacityKWH?: number;
+        images?: { exteriorImageUrl?: string };
+      }
+    | undefined;
+  let conveError: string | null = null;
+  if (conveToken) {
+    const conve = makeConveClient({ accessToken: conveToken, vccApiKey });
+    const r = await conve.GET("/vehicles/{vin}", { params: { path: { vin } } });
+    if (r.error) conveError = `details fetch failed: HTTP ${r.response.status}`;
+    else details = r.data ?? undefined;
+  }
+
+  const userRow = await db.transaction(async (tx) => {
+    let u = externalIdSentinel
       ? (await tx.select().from(users).where(eq(users.email, externalIdSentinel)).limit(1))[0]
       : undefined;
-
-    if (!userRow) {
-      userRow = (
-        await tx
-          .insert(users)
-          .values({ email: externalIdSentinel })
-          .returning()
-      )[0];
+    if (!u) {
+      u = (await tx.insert(users).values({ email: externalIdSentinel }).returning())[0];
     }
 
     await tx
       .insert(volvoCredentials)
       .values({
-        userId: userRow.id,
+        userId: u.id,
         clientId: "test-token",
         clientSecretEnc: encrypt("test-token"),
         vccApiKeyEnc: encrypt(vccApiKey),
@@ -118,18 +116,32 @@ export async function POST(req: Request) {
     await tx
       .insert(volvoTokens)
       .values({
-        userId: userRow.id,
-        accessTokenEnc: encrypt(accessToken),
-        // Test tokens have no refresh token. Store empty-encrypted as a sentinel.
-        refreshTokenEnc: encrypt(""),
-        expiresAt,
-        scope: "energy:state:read energy:capability:read conve:vehicle_relation",
+        userId: u.id,
+        // OAuth columns null; we only use per-API columns in test-mode.
+        accessTokenEnc: null,
+        refreshTokenEnc: null,
+        expiresAt: null,
+        scope: null,
+        energyTokenEnc: encrypt(energyToken),
+        energyExpiresAt,
+        conveTokenEnc: conveToken ? encrypt(conveToken) : null,
+        conveExpiresAt: conveExpiresAt,
+        locationTokenEnc: locationToken ? encrypt(locationToken) : null,
+        locationExpiresAt: locationExpiresAt,
       })
       .onConflictDoUpdate({
         target: volvoTokens.userId,
         set: {
-          accessTokenEnc: encrypt(accessToken),
-          expiresAt,
+          accessTokenEnc: null,
+          refreshTokenEnc: null,
+          expiresAt: null,
+          scope: null,
+          energyTokenEnc: encrypt(energyToken),
+          energyExpiresAt,
+          conveTokenEnc: conveToken ? encrypt(conveToken) : null,
+          conveExpiresAt: conveExpiresAt,
+          locationTokenEnc: locationToken ? encrypt(locationToken) : null,
+          locationExpiresAt: locationExpiresAt,
           updatedAt: new Date(),
         },
       });
@@ -137,8 +149,8 @@ export async function POST(req: Request) {
     await tx
       .insert(vehicles)
       .values({
-        vin: vin!,
-        userId: userRow.id,
+        vin,
+        userId: u.id,
         model: details?.descriptions?.model ?? null,
         modelYear: details?.modelYear ?? null,
         fuelType: details?.fuelType ?? null,
@@ -149,7 +161,7 @@ export async function POST(req: Request) {
       .onConflictDoUpdate({
         target: vehicles.vin,
         set: {
-          userId: userRow.id,
+          userId: u.id,
           model: details?.descriptions?.model ?? null,
           modelYear: details?.modelYear ?? null,
           fuelType: details?.fuelType ?? null,
@@ -159,18 +171,14 @@ export async function POST(req: Request) {
         },
       });
 
-    return userRow;
+    return u;
   });
 
   const session = await getSession();
-  session.userId = result.id;
+  session.userId = userRow.id;
   await session.save();
 
-  // Surface vehicle-details error in the redirect query for debugging.
   const url = new URL("/dashboard", req.url);
-  if (detailsErr) url.searchParams.set("details_err", "1");
+  if (conveError) url.searchParams.set("conve_err", conveError);
   return NextResponse.redirect(url, { status: 303 });
 }
-
-// Imported here at the bottom to keep the route's top noise low.
-import { eq } from "drizzle-orm";

@@ -15,9 +15,21 @@ export async function POST() {
       { status: 404 },
     );
   }
+  const energyCreds = loaded.credsFor("energy");
+  if (!energyCreds) {
+    return NextResponse.json(
+      {
+        ok: false,
+        reason:
+          "no usable Energy API token — sign in again, or paste a fresh test token in the Energy field",
+      },
+      { status: 401 },
+    );
+  }
   const outcome = await pollOne({
     vin: loaded.user.vin,
-    creds: loaded.creds,
+    energyCreds,
+    locationCreds: loaded.credsFor("location"),
     batteryCapacityKwh: loaded.user.batteryCapacityKwh,
   });
   return NextResponse.json(outcome);

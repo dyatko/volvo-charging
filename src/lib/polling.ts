@@ -34,10 +34,12 @@ export type PollOutcome =
 /** Poll one vehicle, dedup-write a state_snapshots row, derive session transitions. */
 export async function pollOne(opts: {
   vin: string;
-  creds: VolvoCreds;
+  energyCreds: VolvoCreds;
+  /** Optional — when absent we skip location capture at session boundaries. */
+  locationCreds?: VolvoCreds | null;
   batteryCapacityKwh: number | null;
 }): Promise<PollOutcome> {
-  const energy = makeEnergyClient(opts.creds);
+  const energy = makeEnergyClient(opts.energyCreds);
   const { data, error, response } = await energy.GET("/vehicles/{vin}/state", {
     params: { path: { vin: opts.vin } },
   });
@@ -125,8 +127,8 @@ export async function pollOne(opts: {
   let transition: "opened" | "closed" | "none" = "none";
 
   if (!wasConnected && isConn) {
-    // DISCONNECTED → CONNECTED*: open a session, fetch location.
-    const location = await fetchLocation(opts);
+    // DISCONNECTED → CONNECTED*: open a session, fetch location if creds available.
+    const location = opts.locationCreds ? await fetchLocation(opts.vin, opts.locationCreds) : null;
     await db.insert(chargingSessions).values({
       vin: opts.vin,
       startedAt: observedAt,
@@ -138,7 +140,7 @@ export async function pollOne(opts: {
     });
     transition = "opened";
   } else if (wasConnected && !isConn) {
-    // CONNECTED* → DISCONNECTED: close the open session, fetch location.
+    // CONNECTED* → DISCONNECTED: close the open session, fetch location if available.
     const open = (
       await db
         .select()
@@ -147,7 +149,7 @@ export async function pollOne(opts: {
         .limit(1)
     )[0];
     if (open) {
-      const location = await fetchLocation(opts);
+      const location = opts.locationCreds ? await fetchLocation(opts.vin, opts.locationCreds) : null;
       const endSoc = next.soc ?? open.startSoc;
       const energyKwh =
         opts.batteryCapacityKwh != null
@@ -189,11 +191,11 @@ export async function pollOne(opts: {
   return { ok: true, snapshotInserted: true, observedAt, transition };
 }
 
-async function fetchLocation(opts: { vin: string; creds: VolvoCreds }) {
+async function fetchLocation(vin: string, creds: VolvoCreds) {
   try {
-    const client = makeLocationClient(opts.creds);
+    const client = makeLocationClient(creds);
     const { data } = await client.GET("/v1/vehicles/{vin}/location", {
-      params: { path: { vin: opts.vin } },
+      params: { path: { vin } },
     });
     return pointToLatLng(data?.data?.geometry?.coordinates);
   } catch {

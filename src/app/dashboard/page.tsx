@@ -102,11 +102,15 @@ export default async function DashboardPage() {
   if (!loaded) redirect("/");
 
   // Best-effort: refresh state on page load so the first dashboard visit shows live data.
-  await pollOne({
-    vin: loaded.user.vin,
-    creds: loaded.creds,
-    batteryCapacityKwh: loaded.user.batteryCapacityKwh,
-  }).catch(() => undefined);
+  const energyCreds = loaded.credsFor("energy");
+  if (energyCreds) {
+    await pollOne({
+      vin: loaded.user.vin,
+      energyCreds,
+      locationCreds: loaded.credsFor("location"),
+      batteryCapacityKwh: loaded.user.batteryCapacityKwh,
+    }).catch(() => undefined);
+  }
 
   const latest = (
     await db
@@ -128,9 +132,16 @@ export default async function DashboardPage() {
   const isConnected = latest?.connectionStatus
     ? CONNECTED.has(latest.connectionStatus)
     : false;
+  const noEnergyCreds = !energyCreds;
 
   return (
     <main className="mx-auto w-full max-w-md flex-1 px-4 py-6">
+      {noEnergyCreds ? (
+        <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-700 dark:bg-amber-900/20 dark:text-amber-200">
+          Your Energy API token has expired or is missing. Showing the last cached snapshot.
+          <a href="/" className="ml-1 underline">Sign in again</a>.
+        </div>
+      ) : null}
       <header className="mb-5 flex items-start justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold tracking-tight">

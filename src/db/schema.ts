@@ -31,14 +31,29 @@ export const volvoCredentials = pgTable("volvo_credentials", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
+// Token storage supports two shapes:
+//   1. OAuth — one access_token covers all APIs; we also have a refresh_token.
+//      We write access_token_enc + refresh_token_enc + expires_at; per-API
+//      columns stay null.
+//   2. Test-mode — Volvo's portal issues a separate test access token per
+//      API. We write whichever per-API columns the user provided; the OAuth
+//      columns stay null.
 export const volvoTokens = pgTable("volvo_tokens", {
   userId: uuid("user_id")
     .primaryKey()
     .references(() => users.id, { onDelete: "cascade" }),
-  accessTokenEnc: text("access_token_enc").notNull(),
-  refreshTokenEnc: text("refresh_token_enc").notNull(),
-  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
-  scope: text("scope").notNull(),
+  // OAuth (Authorization Code) shared token + refresh.
+  accessTokenEnc: text("access_token_enc"),
+  refreshTokenEnc: text("refresh_token_enc"),
+  expiresAt: timestamp("expires_at", { withTimezone: true }),
+  scope: text("scope"),
+  // Test-mode per-API tokens.
+  energyTokenEnc: text("energy_token_enc"),
+  energyExpiresAt: timestamp("energy_expires_at", { withTimezone: true }),
+  conveTokenEnc: text("conve_token_enc"),
+  conveExpiresAt: timestamp("conve_expires_at", { withTimezone: true }),
+  locationTokenEnc: text("location_token_enc"),
+  locationExpiresAt: timestamp("location_expires_at", { withTimezone: true }),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 

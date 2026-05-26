@@ -16,18 +16,24 @@ export type UserVehicle = {
   exteriorImageUrl: string | null;
 };
 
+export type ApiKind = "energy" | "conve" | "location";
+
+export type Loaded = {
+  user: UserVehicle;
+  vccApiKey: string;
+  /**
+   * Resolve usable Volvo credentials for a given API.
+   * Prefers the OAuth shared access_token (if not expired); falls back to a
+   * test-mode per-API token. Returns null if neither is usable.
+   */
+  credsFor: (api: ApiKind) => VolvoCreds | null;
+  /** True if the most recent OAuth attempt was refreshed within this load. */
+  refreshed: boolean;
+};
+
 const REFRESH_WINDOW_MS = 60_000;
 
-/**
- * Resolve everything needed to talk to Volvo for a given user.
- * If the access token is within 60s of expiring and we have a refresh
- * token + client_secret, refresh and persist the new pair in the same call.
- * Returns null if the user has no vehicle, no token, or the refresh failed.
- */
-export async function loadUserVehicleAndCreds(userId: string): Promise<
-  | { user: UserVehicle; creds: VolvoCreds }
-  | null
-> {
+export async function loadUserVehicleAndCreds(userId: string): Promise<Loaded | null> {
   const row = (
     await db
       .select({
@@ -46,6 +52,12 @@ export async function loadUserVehicleAndCreds(userId: string): Promise<
         refreshTokenEnc: volvoTokens.refreshTokenEnc,
         expiresAt: volvoTokens.expiresAt,
         scope: volvoTokens.scope,
+        energyTokenEnc: volvoTokens.energyTokenEnc,
+        energyExpiresAt: volvoTokens.energyExpiresAt,
+        conveTokenEnc: volvoTokens.conveTokenEnc,
+        conveExpiresAt: volvoTokens.conveExpiresAt,
+        locationTokenEnc: volvoTokens.locationTokenEnc,
+        locationExpiresAt: volvoTokens.locationExpiresAt,
       })
       .from(users)
       .innerJoin(vehicles, eq(vehicles.userId, users.id))
@@ -57,45 +69,70 @@ export async function loadUserVehicleAndCreds(userId: string): Promise<
 
   if (!row) return null;
 
-  let accessToken = decrypt(row.accessTokenEnc);
   const vccApiKey = decrypt(row.vccApiKeyEnc);
-  const refreshToken = decrypt(row.refreshTokenEnc);
-  const clientSecret = decrypt(row.clientSecretEnc);
 
-  // Test-token mode: no client_secret / refresh_token, sentinel client_id "test-token".
-  const isTestToken = row.clientId === "test-token";
+  // Refresh OAuth shared token if present and near expiry. The OAuth path
+  // covers all three APIs, so a successful refresh fixes Energy, Conve, and
+  // Location at once.
+  let oauthAccessToken: string | null = row.accessTokenEnc ? decrypt(row.accessTokenEnc) : null;
+  let oauthExpiresAt: Date | null = row.expiresAt;
+  let refreshed = false;
 
-  const expiresInMs = row.expiresAt.getTime() - Date.now();
-  if (!isTestToken && refreshToken && expiresInMs < REFRESH_WINDOW_MS) {
-    try {
-      const tokens = await refreshAccessToken({
-        clientId: row.clientId,
-        clientSecret,
-        refreshToken,
-      });
-      if (tokens.access_token) {
-        accessToken = tokens.access_token;
-        const newExpiresAt = new Date(Date.now() + (tokens.expires_in ?? 1800) * 1000);
-        await db
-          .update(volvoTokens)
-          .set({
-            accessTokenEnc: encrypt(accessToken),
-            refreshTokenEnc: encrypt(tokens.refresh_token ?? refreshToken),
-            expiresAt: newExpiresAt,
-            scope: tokens.scope ?? row.scope,
-            updatedAt: new Date(),
-          })
-          .where(eq(volvoTokens.userId, userId));
+  const isTestModePrimary = row.clientId === "test-token";
+  if (!isTestModePrimary && row.refreshTokenEnc && oauthExpiresAt) {
+    const expiresInMs = oauthExpiresAt.getTime() - Date.now();
+    if (expiresInMs < REFRESH_WINDOW_MS) {
+      try {
+        const clientSecret = decrypt(row.clientSecretEnc);
+        const refreshToken = decrypt(row.refreshTokenEnc);
+        const tokens = await refreshAccessToken({
+          clientId: row.clientId,
+          clientSecret,
+          refreshToken,
+        });
+        if (tokens.access_token) {
+          oauthAccessToken = tokens.access_token;
+          oauthExpiresAt = new Date(Date.now() + (tokens.expires_in ?? 1800) * 1000);
+          await db
+            .update(volvoTokens)
+            .set({
+              accessTokenEnc: encrypt(oauthAccessToken),
+              refreshTokenEnc: encrypt(tokens.refresh_token ?? refreshToken),
+              expiresAt: oauthExpiresAt,
+              scope: tokens.scope ?? row.scope ?? "",
+              updatedAt: new Date(),
+            })
+            .where(eq(volvoTokens.userId, userId));
+          refreshed = true;
+        }
+      } catch (e) {
+        console.error("token refresh failed", e);
+        return null;
       }
-    } catch (e) {
-      // Refresh failed — most likely the user revoked consent or the refresh
-      // token expired. Force the caller to redirect back to the sign-in flow.
-      console.error("token refresh failed", e);
-      return null;
     }
-  } else if (isTestToken && expiresInMs <= 0) {
-    // Test token expired and there's no refresh path — force re-auth.
-    return null;
+  }
+
+  function decryptIfFresh(enc: string | null, expiresAt: Date | null): string | null {
+    if (!enc || !expiresAt) return null;
+    if (expiresAt.getTime() <= Date.now()) return null;
+    return decrypt(enc);
+  }
+
+  const oauthFresh =
+    oauthAccessToken && oauthExpiresAt && oauthExpiresAt.getTime() > Date.now()
+      ? oauthAccessToken
+      : null;
+
+  const perApi: Record<ApiKind, string | null> = {
+    energy: decryptIfFresh(row.energyTokenEnc, row.energyExpiresAt),
+    conve: decryptIfFresh(row.conveTokenEnc, row.conveExpiresAt),
+    location: decryptIfFresh(row.locationTokenEnc, row.locationExpiresAt),
+  };
+
+  function credsFor(api: ApiKind): VolvoCreds | null {
+    const token = oauthFresh ?? perApi[api];
+    if (!token) return null;
+    return { accessToken: token, vccApiKey };
   }
 
   return {
@@ -109,6 +146,8 @@ export async function loadUserVehicleAndCreds(userId: string): Promise<
       batteryCapacityKwh: row.batteryCapacityKwh,
       exteriorImageUrl: row.exteriorImageUrl,
     },
-    creds: { accessToken, vccApiKey },
+    vccApiKey,
+    credsFor,
+    refreshed,
   };
 }

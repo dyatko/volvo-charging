@@ -8,6 +8,13 @@
       "when": 1779781065381,
       "tag": "0000_cool_juggernaut",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1779783064762,
+      "tag": "0001_rare_crusher_hogan",
+      "breakpoints": true
     }
   ]
 }
