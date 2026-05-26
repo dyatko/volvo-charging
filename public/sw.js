@@ -8,7 +8,7 @@
 // Bump CACHE_VERSION whenever the precache list or routing rules change;
 // the `activate` handler purges anything that doesn't match.
 
-const CACHE_VERSION = "v1";
+const CACHE_VERSION = "v2";
 const SHELL_CACHE = `shell-${CACHE_VERSION}`;
 
 // Keep the precache minimal: Next ships hashed JS/CSS that will be fetched
