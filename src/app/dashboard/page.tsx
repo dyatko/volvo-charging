@@ -98,10 +98,34 @@ function Pill({ label }: { label: string }) {
   );
 }
 
+// Brand anchors from <ChargingLogo />: red at low SOC, orange in the middle,
+// green at high. The ring interpolates between them so a change of one
+// percent never produces a visible color jump.
+const SOC_RED: readonly [number, number, number] = [0xe5, 0x39, 0x35];
+const SOC_ORANGE: readonly [number, number, number] = [0xff, 0x8a, 0x00];
+const SOC_GREEN: readonly [number, number, number] = [0x00, 0xc8, 0x53];
+
+function mixRgb(
+  a: readonly [number, number, number],
+  b: readonly [number, number, number],
+  t: number,
+): string {
+  const h = (v: number) => Math.round(v).toString(16).padStart(2, "0");
+  return `#${h(a[0] + (b[0] - a[0]) * t)}${h(a[1] + (b[1] - a[1]) * t)}${h(a[2] + (b[2] - a[2]) * t)}`;
+}
+
+function socRingColor(soc: number): string {
+  if (soc <= 10) return mixRgb(SOC_RED, SOC_RED, 0);
+  if (soc >= 90) return mixRgb(SOC_GREEN, SOC_GREEN, 0);
+  if (soc <= 50) return mixRgb(SOC_RED, SOC_ORANGE, (soc - 10) / 40);
+  return mixRgb(SOC_ORANGE, SOC_GREEN, (soc - 50) / 40);
+}
+
 function SocRing({ soc, target }: { soc: number | null; target: number | null }) {
   const value = soc ?? 0;
   const radius = 60;
   const circ = 2 * Math.PI * radius;
+  const ringColor = soc != null ? socRingColor(soc) : undefined;
   return (
     <div className="relative h-40 w-40">
       <svg viewBox="0 0 160 160" className="h-full w-full -rotate-90">
@@ -110,12 +134,12 @@ function SocRing({ soc, target }: { soc: number | null; target: number | null })
           cx="80"
           cy="80"
           r={radius}
-          stroke="currentColor"
+          stroke={ringColor ?? "currentColor"}
           strokeWidth="14"
           strokeLinecap="round"
           fill="none"
           strokeDasharray={`${(circ * value) / 100} ${circ}`}
-          className="text-emerald-500"
+          className={ringColor ? undefined : "text-zinc-400"}
         />
         {target ? (
           <circle
@@ -302,10 +326,10 @@ export default async function DashboardPage() {
                     </div>
                   </div>
                   {startLocLabel || endLocLabel ? (
-                    <p className="mt-2 text-xs text-zinc-500">
+                    <p className="mt-2 font-mono text-xs tabular-nums text-zinc-500">
                       {startLocLabel && s.startLat != null && s.startLng != null ? (
                         <>
-                          start{" "}
+                          <span aria-hidden>📍</span>{" "}
                           <MapLink
                             lat={s.startLat}
                             lng={s.startLng}
@@ -317,7 +341,7 @@ export default async function DashboardPage() {
                       {startLocLabel && endLocLabel ? " · " : null}
                       {endLocLabel && s.endLat != null && s.endLng != null ? (
                         <>
-                          end{" "}
+                          <span aria-hidden>📍</span>{" "}
                           <MapLink
                             lat={s.endLat}
                             lng={s.endLng}
