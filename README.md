@@ -193,7 +193,7 @@ Push any commit to `main`. The [`Deploy` workflow](./.github/workflows/deploy.ym
 2. Builds the multi-stage Docker image and pushes to Artifact Registry (tagged `:${sha}` and `:latest`).
 3. Spawns `cloud-sql-proxy` on the runner, connects drizzle-kit through `127.0.0.1:5432`, runs migrations against Cloud SQL.
 4. Deploys a no-traffic revision with `--add-cloudsql-instances=<instance>` so the runtime gets a Unix socket at `/cloudsql/<instance>`. `DATABASE_URL` from Secret Manager points there.
-5. Curls `/healthz` on the revision URL.
+5. Curls `/api/healthz` on the service URL.
 6. Flips 100% traffic to the new revision.
 
 ### 4. Per-minute tick
