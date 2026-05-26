@@ -98,12 +98,15 @@ jobs:
           pnpm db:migrate
           kill "$PROXY_PID" || true
 
-      - name: Deploy to Cloud Run (no traffic)
+      - name: Deploy to Cloud Run
         id: deploy
         env:
           IMAGE: ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.GCP_AR_REPO }}/app:${{ github.sha }}
         run: |
-          REVISION="rev-${GITHUB_SHA::8}"
+          # Single-shot deploy: Cloud Run does atomic revision swaps — if the
+          # new revision fails to become Ready, the previous one keeps serving
+          # and `gcloud run deploy` exits non-zero. Rollback is a one-line
+          # `update-traffic --to-revisions=<prev>=100` away if we ever need it.
           gcloud run deploy ${{ env.GCP_SERVICE }} \
             --image="$IMAGE" \
             --region=${{ env.GCP_REGION }} \
@@ -121,34 +124,21 @@ jobs:
             --add-cloudsql-instances="${{ env.GCP_PROJECT_ID }}:${{ env.GCP_REGION }}:${{ env.GCP_SQL_INSTANCE }}" \
             --update-secrets="DATABASE_URL=DATABASE_URL:latest,SESSION_SECRET=SESSION_SECRET:latest,DATA_ENCRYPTION_KEK=DATA_ENCRYPTION_KEK:latest" \
             --update-env-vars="INTERNAL_CALLER_EMAIL=scheduler@${{ env.GCP_PROJECT_ID }}.iam.gserviceaccount.com" \
-            --no-traffic \
-            --tag="$REVISION" \
             --quiet
-          REV_URL=$(gcloud run services describe ${{ env.GCP_SERVICE }} \
-            --region=${{ env.GCP_REGION }} \
-            --format='value(status.traffic[?tag='"$REVISION"'].url)')
-          echo "revision_url=$REV_URL" >> "$GITHUB_OUTPUT"
+          SERVICE_URL=$(gcloud run services describe ${{ env.GCP_SERVICE }} \
+            --region=${{ env.GCP_REGION }} --format='value(status.url)')
+          echo "service_url=$SERVICE_URL" >> "$GITHUB_OUTPUT"
 
-      - name: Smoke test new revision
+      - name: Smoke test
         run: |
           set -e
-          URL="${{ steps.deploy.outputs.revision_url }}"
-          if [ -z "$URL" ]; then
-            echo "::error::Could not resolve revision URL"
-            exit 1
-          fi
+          URL="${{ steps.deploy.outputs.service_url }}"
           for i in 1 2 3 4 5; do
             if curl -fsS --max-time 10 "$URL/healthz"; then
+              echo "✓ /healthz live at $URL"
               exit 0
             fi
             sleep 2
           done
           echo "::error::Smoke test failed against $URL"
           exit 1
-
-      - name: Promote revision to 100% traffic
-        run: |
-          gcloud run services update-traffic ${{ env.GCP_SERVICE }} \
-            --region=${{ env.GCP_REGION }} \
-            --to-latest \
-            --quiet
