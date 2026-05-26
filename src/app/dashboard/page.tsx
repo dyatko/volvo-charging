@@ -10,6 +10,20 @@ import { pollAllVehicles } from "@/lib/polling";
 import { RefreshButton } from "@/components/refresh-button";
 import { AutoRefresh } from "@/components/auto-refresh";
 
+function fmtSessionDuration(startedAt: Date, endedAt: Date | null): string {
+  const end = endedAt ?? new Date();
+  const minutes = Math.max(0, Math.round((end.getTime() - startedAt.getTime()) / 60_000));
+  if (minutes < 60) return `${minutes}m`;
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return m ? `${h}h ${m}m` : `${h}h`;
+}
+
+function fmtCoord(lat: number | null, lng: number | null): string | null {
+  if (lat == null || lng == null) return null;
+  return `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+}
+
 export const dynamic = "force-dynamic";
 
 const CONNECTED = new Set(["CONNECTED", "CONNECTED_AC", "CONNECTED_DC"]);
@@ -127,6 +141,13 @@ export default async function DashboardPage() {
       .limit(1)
   )[0];
 
+  const sessionRows = await db
+    .select()
+    .from(chargingSessions)
+    .where(eq(chargingSessions.vin, active.vin))
+    .orderBy(desc(chargingSessions.startedAt))
+    .limit(50);
+
   const isConnected = latest?.connectionStatus ? CONNECTED.has(latest.connectionStatus) : false;
 
   return (
@@ -149,7 +170,7 @@ export default async function DashboardPage() {
           </h1>
           <p className="mt-0.5 break-all text-xs text-zinc-500">
             {active.batteryCapacityKwh != null ? (
-              <span className="tabular-nums">{active.batteryCapacityKwh} kWh</span>
+              <span className="tabular-nums">{Math.round(active.batteryCapacityKwh)} kWh</span>
             ) : null}
             {active.batteryCapacityKwh != null ? <span> · </span> : null}
             <span className="font-mono">{active.vin}</span>
@@ -219,15 +240,69 @@ export default async function DashboardPage() {
         <RefreshButton />
       </section>
 
+      <section className="mt-6">
+        <h2 className="text-sm font-semibold tracking-tight">Charging sessions</h2>
+        {sessionRows.length === 0 ? (
+          <div className="mt-2 rounded-xl border border-dashed border-zinc-300 p-5 text-center text-xs text-zinc-500 dark:border-zinc-700">
+            No sessions yet. Plug the car in (or hit{" "}
+            <span className="font-medium">Refresh now</span> while plugged in) and one will
+            appear here.
+          </div>
+        ) : (
+          <ul className="mt-2 space-y-2">
+            {sessionRows.map((s) => {
+              const startLoc = fmtCoord(s.startLat, s.startLng);
+              const endLoc = fmtCoord(s.endLat, s.endLng);
+              return (
+                <li
+                  key={s.id}
+                  className="rounded-xl border border-zinc-200 bg-white p-3 shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
+                >
+                  <div className="flex items-baseline justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium">
+                        {new Date(s.startedAt).toLocaleString()}
+                      </p>
+                      <p className="text-xs text-zinc-500">
+                        {fmtSessionDuration(
+                          new Date(s.startedAt),
+                          s.endedAt ? new Date(s.endedAt) : null,
+                        )}{" "}
+                        · {s.connectionType ?? "?"}
+                        {s.isOpen ? " · in progress" : ""}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-mono text-sm tabular-nums">
+                        {s.startSoc}% → {s.endSoc ?? "…"}%
+                      </p>
+                      {s.energyKwh != null ? (
+                        <p className="text-xs text-zinc-500">+{s.energyKwh.toFixed(2)} kWh</p>
+                      ) : null}
+                      {s.peakPowerKw != null ? (
+                        <p className="text-xs text-zinc-500">peak {s.peakPowerKw.toFixed(1)} kW</p>
+                      ) : null}
+                    </div>
+                  </div>
+                  {startLoc || endLoc ? (
+                    <p className="mt-2 text-xs text-zinc-500">
+                      {startLoc ? <>start {startLoc}</> : null}
+                      {startLoc && endLoc ? " · " : null}
+                      {endLoc ? <>end {endLoc}</> : null}
+                    </p>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
+
       {ctx.vehicles.length > 1 ? (
         <p className="mt-6 text-center text-xs text-zinc-500">
           Polling {ctx.vehicles.length} vehicles · use the switcher in the header to view another.
         </p>
-      ) : (
-        <p className="mt-6 text-center text-xs text-zinc-500">
-          Sessions are derived from observed plug/unplug transitions.
-        </p>
-      )}
+      ) : null}
     </main>
   );
 }

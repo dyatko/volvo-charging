@@ -19,12 +19,6 @@ export function Nav(props: Props) {
         {props.signedIn ? (
           <div className="flex flex-1 items-center justify-end gap-2 text-sm text-zinc-600 dark:text-zinc-400">
             <VehicleSwitcher vehicles={props.vehicles} activeVin={props.activeVin} />
-            <Link href="/dashboard" className="hover:text-zinc-900 dark:hover:text-zinc-100">
-              Now
-            </Link>
-            <Link href="/sessions" className="hover:text-zinc-900 dark:hover:text-zinc-100">
-              Sessions
-            </Link>
             <form action="/api/auth/signout" method="POST">
               <button
                 type="submit"
