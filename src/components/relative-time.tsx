@@ -12,14 +12,16 @@ function format(ms: number): string {
 
 export function RelativeTime({ iso }: { iso: string | null }) {
   const ms = iso ? Date.parse(iso) : null;
-  const [label, setLabel] = useState<string>(ms != null ? format(ms) : "—");
+  // Drive re-renders with a 1-Hz tick; derive the label during render so we
+  // don't setState synchronously inside the effect (react-hooks/set-state-in-effect).
+  const [, setTick] = useState(0);
 
   useEffect(() => {
     if (ms == null) return;
-    setLabel(format(ms));
-    const id = setInterval(() => setLabel(format(ms)), 1000);
+    const id = setInterval(() => setTick((t) => t + 1), 1000);
     return () => clearInterval(id);
   }, [ms]);
 
+  const label = ms != null ? format(ms) : "—";
   return <span suppressHydrationWarning>{label}</span>;
 }

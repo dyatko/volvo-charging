@@ -9,6 +9,7 @@ import { TestTokenForm } from "@/components/test-token-form";
 import { StickySignIn } from "@/components/sticky-sign-in";
 import { db } from "@/db/client";
 import { chargingSessions, vehicles } from "@/db/schema";
+import { loadUserContext } from "@/lib/userVehicle";
 
 // Canonicalize the landing on `/` so query-string variants
 // (?mode=test, ?oauth_error=…, ?deleted=1) don't fragment the index.
@@ -90,7 +91,19 @@ async function loadPublicStats(): Promise<{ sessions: number; vehicles: number }
 
 export default async function Home({ searchParams }: { searchParams: Search }) {
   const session = await getSession();
-  if (session.userId) redirect("/dashboard");
+  if (session.userId) {
+    // Only redirect to the dashboard if the dashboard can actually render
+    // for this user. Otherwise the dashboard's own "no context → redirect /"
+    // bounces us back here and we get ERR_TOO_MANY_REDIRECTS.
+    const ctx = await loadUserContext(session.userId).catch(() => null);
+    if (ctx && ctx.activeVehicle) {
+      redirect("/dashboard");
+    } else {
+      // Broken state (missing creds/tokens, no vehicle, failed refresh).
+      // Drop the session so the user can sign in again cleanly.
+      session.destroy();
+    }
+  }
 
   const { oauth_error, mode, deleted } = await searchParams;
   const isDev = process.env.NODE_ENV !== "production";
