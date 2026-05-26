@@ -10,7 +10,7 @@ Live at **https://ev.marat.online** (Cloud Run, `europe-north1`).
 
 - One-page dashboard at `/dashboard`: SOC ring + target overlay, plug / charging / connection-type pills, range, charging power (W → kW normalised), live coordinates (📍 lat,lng) folded into the state card, auto-refresh every 15 s while the tab is visible. Below it: reverse-chronological session list with in-progress kWh + SOC computed on the fly.
 - Vehicle switcher in the header when the user owns more than one VIN; single-vehicle users see no chrome.
-- Two sign-in paths: real OAuth 2.0 + PKCE via `openid-client` (recommended once your Volvo developer app is Published), and a test-token mode for pre-publish development where each Volvo API issues its own access token.
+- Two sign-in paths: real OAuth 2.0 + PKCE via `openid-client` using the app's own published-app credentials (one click — no per-user paperwork), and a test-token mode for development against unpublished apps where each Volvo API issues its own short-lived access token.
 - Typed clients for **three** Volvo APIs generated from vendored OpenAPI specs:
   - **Energy API v2** (`state` + `capabilities`)
   - **Connected Vehicle v2** (`GET /vehicles`, `GET /vehicles/{vin}` — full surface available via generated types if needed later)
@@ -31,7 +31,7 @@ Live at **https://ev.marat.online** (Cloud Run, `europe-north1`).
 | ✅ 5 | First production deploy through GHA. pnpm 11 with supply-chain `minimumReleaseAge=24h` enforced both locally and in the container. Custom domain `ev.marat.online` mapped (managed TLS) |
 | ⏳ 6 | `infra/scheduler.sh` to activate the 1-min server-side tick (independent of any browser session) |
 | ⏳ 7 | PWA polish: install prompt, offline shell for `/dashboard`, Web Push notifications on session-close events |
-| ⏳ 8 | Submit the OAuth app for Volvo publish review → drop the BYOC onboarding when approved |
+| ✅ 8 | App published with Volvo. OAuth flow uses server-side `VOLVO_CLIENT_ID` / `VOLVO_CLIENT_SECRET` / `VOLVO_VCC_API_KEY` (Secret Manager) — no per-user credential paperwork. |
 
 Full plan / design notes: `~/.claude/plans/i-want-to-build-zippy-sparkle.md`.
 
@@ -58,26 +58,24 @@ open http://localhost:3000
 
 ### Two sign-in paths
 
-The home page lets you choose between **Sign in with Volvo ID** (real OAuth) and **Use a test
-token** (fallback for apps you haven't published yet).
+The home page lets you choose between **Sign in with Volvo ID** (one-click OAuth using the
+app's own published credentials) and **Use a test token** (for development against an
+unpublished app).
 
-#### Path A — Sign in with Volvo ID (recommended once your app is published)
+#### Path A — Sign in with Volvo ID (default)
 
-Configure your Volvo API application at
-[developer.volvocars.com](https://developer.volvocars.com/account/#your-api-applications):
+The app holds its own `VOLVO_CLIENT_ID`, `VOLVO_CLIENT_SECRET`, and `VOLVO_VCC_API_KEY` (from
+Secret Manager in prod, `.env.local` locally). End users just click **Sign in with Volvo ID**:
 
-1. Click **Publish** on your application. **Volvo issues your `client_id` and `client_secret`
-   immediately upon submission**, so you can self-test against your own Volvo ID before manual
-   review completes.
-2. In the Publish form, select scopes: `openid`, `energy:state:read`, `energy:capability:read`,
-   `conve:vehicle_relation`, `location:read`.
-3. Add the redirect URI `http://localhost:3000/api/auth/callback`.
-4. Paste `client_id`, `client_secret`, and the **VCC API key (Primary)** into the home page form.
-5. You're redirected to `volvoid.eu.volvocars.com` to authorize, then bounced back to
-   `/api/auth/callback`. We exchange the code with PKCE, decode the `id_token` to identify your
-   Volvo ID, fetch your VIN list and `VehicleDetails` from Connected Vehicle, and persist
-   everything encrypted (AES-256-GCM keyed off `DATA_ENCRYPTION_KEK`).
-6. Access tokens last 30 minutes; we refresh them automatically using the refresh token
+1. `GET /api/auth/start` reads the three env vars, runs OIDC discovery against
+   `volvoid.eu.volvocars.com`, mints a PKCE verifier + state, parks them in the iron-session
+   cookie, and 303s to Volvo's authorize endpoint with our `redirect_uri`.
+2. After the user approves, Volvo bounces back to `/api/auth/callback`. We exchange the code
+   (PKCE + state checked by `openid-client`), decode the `id_token` to identify the Volvo ID
+   (`sub` claim becomes our user key), fetch the user's VIN list and `VehicleDetails` from
+   Connected Vehicle, and persist tokens encrypted (AES-256-GCM keyed off
+   `DATA_ENCRYPTION_KEK`).
+3. Access tokens last 30 minutes; we refresh them automatically using the refresh token
    whenever a request is within 60 s of expiry, so the polling loop never carries an expired
    token.
 
@@ -129,7 +127,7 @@ A "session" here is the **plug interval**, not the active-charging interval. The
 - **Public regions**: EU/MEA + US/CA/LatAm only. Asia/Pacific is unsupported.
 - **Supported cars**: BEVs (EX30/EX40/EX90) + recent PHEVs (XC60/S90/V90 MY2022+, XC90/S60/V60 MY2023+).
 - **Rate limit**: 100 req/min per (Volvo ID, client ID) **and** a 10 000 req/day per-app quota. We poll Energy state every minute, call Location only on observable-state changes, and wrap every call in exponential backoff that respects `Retry-After`.
-- **Publish approval**: a true "Sign in with Volvo ID" experience requires Volvo to approve a Published app. Until then, the BYOC mode asks each user to plug in their own Volvo developer client ID/secret/api-key.
+- **Published-app credentials**: real OAuth requires the three server-side env vars (`VOLVO_CLIENT_ID`, `VOLVO_CLIENT_SECRET`, `VOLVO_VCC_API_KEY`) to be set. If any is missing, `/api/auth/start` redirects back to the landing page with `?oauth_error=server_missing_volvo_credentials`.
 - **Per-field statuses**: each Energy property is independently `OK` or `ERROR`. Capabilities can falsely claim support — handle per-field errors in UI.
 - **Stale fields**: every property has its own `updatedAt`; the response is not "now". A parked car can have a 4-month-old `chargingCurrentLimit` alongside a minute-old SOC.
 

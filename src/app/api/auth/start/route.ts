@@ -1,37 +1,25 @@
 import { NextResponse } from "next/server";
-import { z } from "zod";
 import { getSession } from "@/lib/session";
 import { startAuthCodeFlow } from "@/lib/oauth";
 import { publicOrigin, publicUrl } from "@/lib/origin";
+import { getPublishedAppCreds } from "@/lib/volvoConfig";
 
-const Form = z.object({
-  clientId: z.string().min(1, "client_id is required"),
-  clientSecret: z.string().min(1, "client_secret is required"),
-  vccApiKey: z.string().min(20, "vcc-api-key must be 20+ chars"),
-});
-
-export async function POST(req: Request) {
-  const form = await req.formData();
-  const parsed = Form.safeParse({
-    clientId: form.get("clientId"),
-    clientSecret: form.get("clientSecret"),
-    vccApiKey: form.get("vccApiKey"),
-  });
-  if (!parsed.success) {
-    return NextResponse.json(
-      { ok: false, error: "Invalid form", details: parsed.error.flatten() },
-      { status: 400 },
+export async function GET(req: Request) {
+  const creds = getPublishedAppCreds();
+  if (!creds) {
+    return NextResponse.redirect(
+      publicUrl(req, `/?oauth_error=${encodeURIComponent("server_missing_volvo_credentials")}`),
+      { status: 303 },
     );
   }
 
-  const origin = publicOrigin(req);
-  const redirectUri = `${origin}/api/auth/callback`;
+  const redirectUri = `${publicOrigin(req)}/api/auth/callback`;
 
   let started;
   try {
     started = await startAuthCodeFlow({
-      clientId: parsed.data.clientId,
-      clientSecret: parsed.data.clientSecret,
+      clientId: creds.clientId,
+      clientSecret: creds.clientSecret,
       redirectUri,
     });
   } catch (e) {
@@ -48,9 +36,9 @@ export async function POST(req: Request) {
 
   const session = await getSession();
   session.pending = {
-    clientId: parsed.data.clientId,
-    clientSecret: parsed.data.clientSecret,
-    vccApiKey: parsed.data.vccApiKey,
+    clientId: creds.clientId,
+    clientSecret: creds.clientSecret,
+    vccApiKey: creds.vccApiKey,
     codeVerifier: started.codeVerifier,
     state: started.state,
     redirectUri,

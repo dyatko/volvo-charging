@@ -122,7 +122,7 @@ jobs:
             --max-instances=2 \
             --service-account="cloud-run-app@${{ env.GCP_PROJECT_ID }}.iam.gserviceaccount.com" \
             --add-cloudsql-instances="${{ env.GCP_PROJECT_ID }}:${{ env.GCP_REGION }}:${{ env.GCP_SQL_INSTANCE }}" \
-            --update-secrets="DATABASE_URL=DATABASE_URL:latest,SESSION_SECRET=SESSION_SECRET:latest,DATA_ENCRYPTION_KEK=DATA_ENCRYPTION_KEK:latest" \
+            --update-secrets="DATABASE_URL=DATABASE_URL:latest,SESSION_SECRET=SESSION_SECRET:latest,DATA_ENCRYPTION_KEK=DATA_ENCRYPTION_KEK:latest,VOLVO_CLIENT_ID=VOLVO_CLIENT_ID:latest,VOLVO_CLIENT_SECRET=VOLVO_CLIENT_SECRET:latest,VOLVO_VCC_API_KEY=VOLVO_VCC_API_KEY:latest" \
             --update-env-vars="INTERNAL_CALLER_EMAIL=scheduler@${{ env.GCP_PROJECT_ID }}.iam.gserviceaccount.com" \
             --quiet
           SERVICE_URL=$(gcloud run services describe ${{ env.GCP_SERVICE }} \

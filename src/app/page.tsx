@@ -1,7 +1,6 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { getSession } from "@/lib/session";
-import { OAuthForm } from "@/components/oauth-form";
 import { TestTokenForm } from "@/components/test-token-form";
 
 type Search = Promise<{ oauth_error?: string; mode?: string; deleted?: string }>;
@@ -171,52 +170,29 @@ export default async function Home({ searchParams }: { searchParams: Search }) {
           </Link>
         </div>
 
-        {!showTestToken ? <OAuthIntro /> : <TestTokenIntro />}
-        {!showTestToken ? <OAuthForm /> : <TestTokenForm />}
+        {!showTestToken ? <OAuthSignIn /> : <><TestTokenIntro /><TestTokenForm /></>}
       </section>
     </main>
   );
 }
 
-function OAuthIntro() {
+function OAuthSignIn() {
   return (
-    <details className="mt-4 rounded-lg border border-zinc-200 bg-white p-4 text-sm dark:border-zinc-800 dark:bg-zinc-900">
-      <summary className="cursor-pointer font-medium">
-        One-time setup — publishing your app at developer.volvocars.com
-      </summary>
-      <ol className="mt-3 list-decimal space-y-1.5 pl-5 text-zinc-600 dark:text-zinc-400">
-        <li>
-          Open{" "}
-          <a
-            className="underline"
-            href="https://developer.volvocars.com/account/#your-api-applications"
-            target="_blank"
-            rel="noreferrer"
-          >
-            developer.volvocars.com → your API applications
-          </a>
-          .
-        </li>
-        <li>
-          Click <strong>Publish</strong> on your application. In the form, select scopes:
-          <code className="ml-1 text-xs">openid</code>,{" "}
-          <code className="text-xs">energy:state:read</code>,{" "}
-          <code className="text-xs">energy:capability:read</code>,{" "}
-          <code className="text-xs">conve:vehicle_relation</code>,{" "}
-          <code className="text-xs">location:read</code>.
-        </li>
-        <li>
-          Add this redirect URI:
-          <div className="mt-1 select-all rounded bg-zinc-100 px-2 py-1 font-mono text-xs dark:bg-zinc-800">
-            http://localhost:3000/api/auth/callback
-          </div>
-        </li>
-        <li>
-          Submit for review. <strong>Volvo issues your client_id and client_secret immediately</strong>{" "}
-          so you can self-test before approval lands.
-        </li>
-      </ol>
-    </details>
+    <div className="mt-4 rounded-xl border border-zinc-200 bg-white p-6 text-sm shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
+      <p className="text-zinc-600 dark:text-zinc-400">
+        You&apos;ll be sent to Volvo&apos;s sign-in page. After approving access, you&apos;ll
+        land back on your dashboard with your live charging state ready.
+      </p>
+      <a
+        href="/api/auth/start"
+        className="mt-5 inline-flex w-full items-center justify-center rounded-lg bg-zinc-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
+      >
+        Sign in with Volvo ID →
+      </a>
+      <p className="mt-3 text-center text-xs text-zinc-500">
+        Uses Volvo&apos;s official OAuth 2.0 + PKCE. We never see your password.
+      </p>
+    </div>
   );
 }
 
