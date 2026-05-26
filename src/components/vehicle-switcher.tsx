@@ -31,7 +31,7 @@ export function VehicleSwitcher({
       value={activeVin ?? ""}
       onChange={onChange}
       disabled={isPending}
-      className="rounded-md border border-zinc-300 bg-white px-2 py-1 text-xs font-mono disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900"
+      className="rounded-full border border-zinc-300/70 bg-white/60 px-3 py-1 text-xs font-mono backdrop-blur disabled:opacity-50 dark:border-white/10 dark:bg-zinc-800/60"
       aria-label="Switch vehicle"
     >
       {vehicles.map((v) => (
