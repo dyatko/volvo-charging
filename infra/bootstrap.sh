@@ -143,8 +143,10 @@ if gcloud secrets describe DB_PASSWORD >/dev/null 2>&1 && \
   echo "→ DB_PASSWORD secret already set, reusing"
   DB_PASSWORD=$(gcloud secrets versions access latest --secret=DB_PASSWORD)
 else
-  echo "→ Generating Postgres user password (alphanumeric, 32 chars)"
-  DB_PASSWORD=$(LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c 32)
+  echo "→ Generating Postgres user password (32 hex chars)"
+  # openssl rand -hex emits exactly N*2 chars to stdout with no pipe → no
+  # SIGPIPE for `tr | head` to trip set -o pipefail.
+  DB_PASSWORD=$(openssl rand -hex 16)
   ensure_secret_text DB_PASSWORD "$DB_PASSWORD"
 fi
 
