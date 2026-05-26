@@ -3,17 +3,18 @@
 # --- 1. install deps ---
 FROM node:22-alpine AS deps
 WORKDIR /app
-# Pin pnpm: pnpm 10+ defaults to minimumReleaseAge=24h and refuses to
-# install packages published in the last day, which makes Docker builds
-# non-deterministic. 9.7.1 matches what produced the committed lockfile.
-RUN corepack enable && corepack prepare pnpm@9.7.1 --activate
+# pnpm version comes from the packageManager field in package.json.
+# pnpm 10+ enforces minimumReleaseAge=24h as supply-chain protection;
+# keeping it on is intentional. Locally bump that pin to the latest
+# pnpm 11.x periodically.
 COPY package.json pnpm-lock.yaml ./
+RUN corepack enable
 RUN pnpm install --frozen-lockfile
 
 # --- 2. build ---
 FROM node:22-alpine AS builder
 WORKDIR /app
-RUN corepack enable && corepack prepare pnpm@9.7.1 --activate
+RUN corepack enable
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
