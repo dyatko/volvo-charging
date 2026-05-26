@@ -8,6 +8,11 @@ on:
 permissions:
   contents: read
 
+# Force JS-actions onto Node 24 ahead of GitHub flipping the default on
+# 2026-06-02; silences the Node 20 deprecation warning today.
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 jobs:
   verify:
     runs-on: ubuntu-latest
@@ -20,7 +25,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile

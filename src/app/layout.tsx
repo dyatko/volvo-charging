@@ -1,6 +1,7 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import { SWRegister } from "@/components/sw-register";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -58,6 +59,24 @@ export const metadata: Metadata = {
       "Live charging status and session log for your Volvo. Built on Volvo's official APIs.",
   },
   robots: { index: true, follow: true },
+  appleWebApp: {
+    capable: true,
+    title: "EV Charging",
+    statusBarStyle: "black-translucent",
+  },
+  // Next 16's apple-icon file convention only accepts jpg/png. SVG works
+  // fine via an explicit `<link rel="apple-touch-icon">`, even though iOS
+  // rasterizes it before showing on the home screen.
+  icons: {
+    apple: [{ url: "/apple-icon.svg", type: "image/svg+xml" }],
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#fafafa" },
+    { media: "(prefers-color-scheme: dark)", color: "#0a0a0a" },
+  ],
 };
 
 export default async function RootLayout({
@@ -88,6 +107,7 @@ export default async function RootLayout({
         currentLat: vehicles.currentLat,
         currentLng: vehicles.currentLng,
         locationUpdatedAt: vehicles.locationUpdatedAt,
+        lastSeenAt: vehicles.lastSeenAt,
       })
       .from(vehicles)
       .where(eq(vehicles.userId, session.userId))
@@ -103,6 +123,7 @@ export default async function RootLayout({
         <Nav {...navProps} />
         <div className="flex flex-1 flex-col">{children}</div>
         <Footer />
+        <SWRegister />
       </body>
     </html>
   );

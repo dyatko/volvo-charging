@@ -11,6 +11,9 @@ permissions:
   id-token: write
 
 env:
+  # Force JS-actions onto Node 24 ahead of GitHub flipping the default
+  # on 2026-06-02; silences the Node 20 deprecation warning today.
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
   GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
   GCP_PROJECT_NUMBER: ${{ vars.GCP_PROJECT_NUMBER }}
   GCP_REGION: europe-north1
@@ -49,7 +52,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile

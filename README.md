@@ -29,8 +29,8 @@ Live at **https://ev.marat.online** (Cloud Run, `europe-north1`).
 | ✅ 3 | Pre-publish hardening: 429 + Retry-After backoff, sign-out revokes Volvo refresh token, GDPR endpoints (delete account, export, disconnect vehicle), privacy + terms pages, SEO-ready landing page, rebrand to *EV Charging History* |
 | ✅ 4 | Cloud Run + Cloud SQL (`db-f1-micro` Enterprise edition, europe-north1) + Artifact Registry + Secret Manager + WIF — provisioned by `infra/bootstrap.sh` |
 | ✅ 5 | First production deploy through GHA. pnpm 11 with supply-chain `minimumReleaseAge=24h` enforced both locally and in the container. Custom domain `ev.marat.online` mapped (managed TLS) |
-| ⏳ 6 | `infra/scheduler.sh` to activate the 1-min server-side tick (independent of any browser session) |
-| ⏳ 7 | PWA polish: install prompt, offline shell for `/dashboard`, Web Push notifications on session-close events |
+| ✅ 6 | `infra/scheduler.sh` runs the 1-min OIDC-authenticated tick from Cloud Scheduler in `europe-west1` (Scheduler isn't offered in `europe-north1`), driving polling independent of any browser session |
+| ⏳ 7 | PWA polish: installable shell (`manifest.webmanifest` + icons + service worker) and stale-while-revalidate offline read for `/api/poll`. Web Push intentionally skipped — Volvo's own app already notifies on session events. |
 | ✅ 8 | App published with Volvo. OAuth flow uses server-side `VOLVO_CLIENT_ID` / `VOLVO_CLIENT_SECRET` / `VOLVO_VCC_API_KEY` (Secret Manager) — no per-user credential paperwork. |
 
 Full plan / design notes: `~/.claude/plans/i-want-to-build-zippy-sparkle.md`.
