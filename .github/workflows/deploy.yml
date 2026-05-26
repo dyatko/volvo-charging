@@ -119,7 +119,7 @@ jobs:
             --timeout=300 \
             --min-instances=0 \
             --max-instances=2 \
-            --service-account="app@${{ env.GCP_PROJECT_ID }}.iam.gserviceaccount.com" \
+            --service-account="cloud-run-app@${{ env.GCP_PROJECT_ID }}.iam.gserviceaccount.com" \
             --add-cloudsql-instances="${{ env.GCP_PROJECT_ID }}:${{ env.GCP_REGION }}:${{ env.GCP_SQL_INSTANCE }}" \
             --update-secrets="DATABASE_URL=DATABASE_URL:latest,SESSION_SECRET=SESSION_SECRET:latest,DATA_ENCRYPTION_KEK=DATA_ENCRYPTION_KEK:latest" \
             --update-env-vars="INTERNAL_CALLER_EMAIL=scheduler@${{ env.GCP_PROJECT_ID }}.iam.gserviceaccount.com" \

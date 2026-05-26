@@ -49,11 +49,11 @@ create_sa() {
   gcloud iam service-accounts describe "$name@$PROJECT_ID.iam.gserviceaccount.com" >/dev/null 2>&1 || \
     gcloud iam service-accounts create "$name" --display-name="$display"
 }
-create_sa app       "Cloud Run runtime"
-create_sa deployer  "GitHub Actions deployer"
-create_sa scheduler "Cloud Scheduler tick caller"
+create_sa cloud-run-app "Cloud Run runtime"
+create_sa deployer      "GitHub Actions deployer"
+create_sa scheduler     "Cloud Scheduler tick caller"
 
-APP_SA="app@$PROJECT_ID.iam.gserviceaccount.com"
+APP_SA="cloud-run-app@$PROJECT_ID.iam.gserviceaccount.com"
 DEPLOYER_SA="deployer@$PROJECT_ID.iam.gserviceaccount.com"
 SCHEDULER_SA="scheduler@$PROJECT_ID.iam.gserviceaccount.com"
 
@@ -71,7 +71,7 @@ for r in roles/artifactregistry.writer roles/run.admin roles/iam.serviceAccountU
          roles/secretmanager.secretAccessor roles/cloudsql.client; do
   grant "$DEPLOYER_SA" "$r"
 done
-# app: read secrets at runtime + connect to Cloud SQL via the built-in proxy
+# cloud-run-app: read secrets at runtime + connect to Cloud SQL via the built-in proxy
 grant "$APP_SA" roles/secretmanager.secretAccessor
 grant "$APP_SA" roles/cloudsql.client
 
