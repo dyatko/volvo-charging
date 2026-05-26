@@ -44,6 +44,9 @@ export default async function RootLayout({
         externalColour: vehicles.externalColour,
         batteryCapacityKwh: vehicles.batteryCapacityKwh,
         exteriorImageUrl: vehicles.exteriorImageUrl,
+        currentLat: vehicles.currentLat,
+        currentLng: vehicles.currentLng,
+        locationUpdatedAt: vehicles.locationUpdatedAt,
       })
       .from(vehicles)
       .where(eq(vehicles.userId, session.userId))

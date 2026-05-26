@@ -73,6 +73,10 @@ export const vehicles = pgTable(
     batteryCapacityKwh: real("battery_capacity_kwh"),
     exteriorImageUrl: text("exterior_image_url"),
     capabilitiesJson: jsonb("capabilities_json"),
+    // Last-known location, refreshed on every poll when a Location token is available.
+    currentLat: doublePrecision("current_lat"),
+    currentLng: doublePrecision("current_lng"),
+    locationUpdatedAt: timestamp("location_updated_at", { withTimezone: true }),
     lastSeenAt: timestamp("last_seen_at", { withTimezone: true }),
     nextPollAt: timestamp("next_poll_at", { withTimezone: true }).defaultNow().notNull(),
     consecutiveFailures: smallint("consecutive_failures").default(0).notNull(),

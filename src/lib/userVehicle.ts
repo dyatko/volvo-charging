@@ -13,6 +13,9 @@ export type VehicleRow = {
   externalColour: string | null;
   batteryCapacityKwh: number | null;
   exteriorImageUrl: string | null;
+  currentLat: number | null;
+  currentLng: number | null;
+  locationUpdatedAt: Date | null;
 };
 
 export type ApiKind = "energy" | "conve" | "location";
@@ -138,6 +141,9 @@ export async function loadUserContext(userId: string): Promise<UserContext | nul
       externalColour: vehicles.externalColour,
       batteryCapacityKwh: vehicles.batteryCapacityKwh,
       exteriorImageUrl: vehicles.exteriorImageUrl,
+      currentLat: vehicles.currentLat,
+      currentLng: vehicles.currentLng,
+      locationUpdatedAt: vehicles.locationUpdatedAt,
     })
     .from(vehicles)
     .where(eq(vehicles.userId, userId))

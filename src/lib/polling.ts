@@ -104,6 +104,16 @@ export async function pollOne(opts: {
     prev.targetSoc === next.targetSoc &&
     prev.currentLimitA === next.currentLimitA;
 
+  // Refresh "current location" every poll when we have a Location token —
+  // this is what the dashboard reads to show where the car is right now.
+  // Charging-session boundaries also use Location calls separately below; in
+  // practice those resolve to the same value within the same poll so the
+  // extra call is only here on every-poll cadence.
+  let liveLocation: { lat: number; lng: number } | null = null;
+  if (opts.locationCreds) {
+    liveLocation = await fetchLocation(opts.vin, opts.locationCreds);
+  }
+
   // Always bump vehicle.last_seen + next_poll regardless of dedup.
   await db
     .update(vehicles)
@@ -111,6 +121,13 @@ export async function pollOne(opts: {
       lastSeenAt: new Date(),
       nextPollAt: new Date(Date.now() + 60_000),
       consecutiveFailures: 0,
+      ...(liveLocation
+        ? {
+            currentLat: liveLocation.lat,
+            currentLng: liveLocation.lng,
+            locationUpdatedAt: new Date(),
+          }
+        : {}),
     })
     .where(eq(vehicles.vin, opts.vin));
 
@@ -128,20 +145,19 @@ export async function pollOne(opts: {
   let transition: "opened" | "closed" | "none" = "none";
 
   if (!wasConnected && isConn) {
-    // DISCONNECTED → CONNECTED*: open a session, fetch location if creds available.
-    const location = opts.locationCreds ? await fetchLocation(opts.vin, opts.locationCreds) : null;
+    // DISCONNECTED → CONNECTED*: open a session, reuse the live location.
     await db.insert(chargingSessions).values({
       vin: opts.vin,
       startedAt: observedAt,
       startSoc: next.soc ?? 0,
       connectionType: next.chargingType,
-      startLat: location?.lat ?? null,
-      startLng: location?.lng ?? null,
+      startLat: liveLocation?.lat ?? null,
+      startLng: liveLocation?.lng ?? null,
       isOpen: true,
     });
     transition = "opened";
   } else if (wasConnected && !isConn) {
-    // CONNECTED* → DISCONNECTED: close the open session, fetch location if available.
+    // CONNECTED* → DISCONNECTED: close the open session, reuse the live location.
     const open = (
       await db
         .select()
@@ -150,7 +166,7 @@ export async function pollOne(opts: {
         .limit(1)
     )[0];
     if (open) {
-      const location = opts.locationCreds ? await fetchLocation(opts.vin, opts.locationCreds) : null;
+      const location = liveLocation;
       const endSoc = next.soc ?? open.startSoc;
       const energyKwh =
         opts.batteryCapacityKwh != null
