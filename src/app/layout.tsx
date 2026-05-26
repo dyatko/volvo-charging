@@ -1,5 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { headers } from "next/headers";
+import { publicOriginFromHeaders } from "@/lib/origin";
 import "./globals.css";
 import { SWRegister } from "@/components/sw-register";
 
@@ -20,67 +22,68 @@ import { db } from "@/db/client";
 import { stateSnapshots, users, vehicles } from "@/db/schema";
 import { desc, eq } from "drizzle-orm";
 
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
-
-export const metadata: Metadata = {
-  metadataBase: new URL(siteUrl),
-  title: {
-    default: "EV Charging History — live charging status & session log for your Volvo",
-    template: "%s",
-  },
-  description:
-    "Track your Volvo's state of charge, session-by-session energy history, and live location in one mobile-first dashboard. Connects to Volvo's official Connected Vehicle, Energy, and Location APIs.",
-  applicationName: "EV Charging History",
-  authors: [{ name: "Marat Dyatko" }],
-  keywords: [
-    "EV charging history",
-    "EV charging log",
-    "Volvo charging history",
-    "Volvo EV dashboard",
-    "Volvo state of charge",
-    "Volvo Energy API",
-    "Volvo Connected Vehicle API",
-    "Volvo XC40 Recharge charging",
-    "Volvo EX30 charging app",
-  ],
-  openGraph: {
-    type: "website",
-    siteName: "EV Charging History",
-    title: "EV Charging History — live charging status & session log for your Volvo",
+export async function generateMetadata(): Promise<Metadata> {
+  const siteUrl = publicOriginFromHeaders(await headers());
+  return {
+    metadataBase: new URL(siteUrl),
+    title: {
+      default: "EV Charging History — live charging status & session log for your Volvo",
+      template: "%s",
+    },
     description:
-      "Mobile-first dashboard for your Volvo's state of charge, charging sessions, and live location. Built on Volvo's official Connected Vehicle, Energy, and Location APIs.",
-    url: siteUrl,
-    locale: "en_US",
-    // Image is auto-picked up from src/app/opengraph-image.tsx (file convention).
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: "EV Charging History",
-    description:
-      "Live charging status and session log for your Volvo. Built on Volvo's official APIs.",
-    // Image is auto-picked up from src/app/opengraph-image.tsx (file convention).
-  },
-  robots: { index: true, follow: true },
-  appleWebApp: {
-    capable: true,
-    title: "EV Charging",
-    statusBarStyle: "black-translucent",
-  },
-  // Next 16's apple-icon file convention only accepts jpg/png. SVG works
-  // fine via an explicit `<link rel="apple-touch-icon">`, even though iOS
-  // rasterizes it before showing on the home screen.
-  //
-  // `app/icon.svg` is auto-included by file convention and theme-adapts via
-  // `prefers-color-scheme` inside the SVG. The two `.ico` files below give
-  // older browsers (that don't honor SVG favicons) a theme-aware fallback.
-  icons: {
-    icon: [
-      { url: "/favicon-light.ico", media: "(prefers-color-scheme: light)" },
-      { url: "/favicon-dark.ico", media: "(prefers-color-scheme: dark)" },
+      "Track your Volvo's state of charge, session-by-session energy history, and live location in one mobile-first dashboard. Connects to Volvo's official Connected Vehicle, Energy, and Location APIs.",
+    applicationName: "EV Charging History",
+    authors: [{ name: "Marat Dyatko" }],
+    keywords: [
+      "EV charging history",
+      "EV charging log",
+      "Volvo charging history",
+      "Volvo EV dashboard",
+      "Volvo state of charge",
+      "Volvo Energy API",
+      "Volvo Connected Vehicle API",
+      "Volvo XC40 Recharge charging",
+      "Volvo EX30 charging app",
     ],
-    apple: [{ url: "/apple-icon.svg", type: "image/svg+xml" }],
-  },
-};
+    openGraph: {
+      type: "website",
+      siteName: "EV Charging History",
+      title: "EV Charging History — live charging status & session log for your Volvo",
+      description:
+        "Mobile-first dashboard for your Volvo's state of charge, charging sessions, and live location. Built on Volvo's official Connected Vehicle, Energy, and Location APIs.",
+      url: siteUrl,
+      locale: "en_US",
+      // Image is auto-picked up from src/app/opengraph-image.tsx (file convention).
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: "EV Charging History",
+      description:
+        "Live charging status and session log for your Volvo. Built on Volvo's official APIs.",
+      // Image is auto-picked up from src/app/opengraph-image.tsx (file convention).
+    },
+    robots: { index: true, follow: true },
+    appleWebApp: {
+      capable: true,
+      title: "EV Charging",
+      statusBarStyle: "black-translucent",
+    },
+    // Next 16's apple-icon file convention only accepts jpg/png. SVG works
+    // fine via an explicit `<link rel="apple-touch-icon">`, even though iOS
+    // rasterizes it before showing on the home screen.
+    //
+    // `app/icon.svg` is auto-included by file convention and theme-adapts via
+    // `prefers-color-scheme` inside the SVG. The two `.ico` files below give
+    // older browsers (that don't honor SVG favicons) a theme-aware fallback.
+    icons: {
+      icon: [
+        { url: "/favicon-light.ico", media: "(prefers-color-scheme: light)" },
+        { url: "/favicon-dark.ico", media: "(prefers-color-scheme: dark)" },
+      ],
+      apple: [{ url: "/apple-icon.svg", type: "image/svg+xml" }],
+    },
+  };
+}
 
 export const viewport: Viewport = {
   themeColor: [

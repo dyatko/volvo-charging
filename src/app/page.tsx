@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import Link from "next/link";
+import { headers } from "next/headers";
 import { getSession } from "@/lib/session";
+import { publicOriginFromHeaders } from "@/lib/origin";
 import { TestTokenForm } from "@/components/test-token-form";
-
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
 
 // Canonicalize the landing on `/` so query-string variants
 // (?mode=test, ?oauth_error=…, ?deleted=1) don't fragment the index.
@@ -33,40 +33,42 @@ const features = [
   },
 ];
 
-const jsonLd = {
-  "@context": "https://schema.org",
-  "@graph": [
-    {
-      "@type": "WebApplication",
-      "@id": `${siteUrl}/#app`,
-      name: "EV Charging History",
-      applicationCategory: "UtilityApplication",
-      operatingSystem: "Web",
-      description:
-        "Mobile-first dashboard for your Volvo's state of charge, charging session history, and live location. Built on Volvo's official Connected Vehicle, Energy, and Location APIs.",
-      offers: { "@type": "Offer", price: "0", priceCurrency: "EUR" },
-      publisher: { "@id": `${siteUrl}/#org` },
-    },
-    {
-      "@type": "WebSite",
-      "@id": `${siteUrl}/#website`,
-      url: siteUrl,
-      name: "EV Charging History",
-      description:
-        "Live charging status and session log for your Volvo, built on Volvo's official APIs.",
-      publisher: { "@id": `${siteUrl}/#org` },
-      inLanguage: "en",
-    },
-    {
-      "@type": "Organization",
-      "@id": `${siteUrl}/#org`,
-      name: "EV Charging History",
-      url: siteUrl,
-      logo: `${siteUrl}/icon.svg`,
-      sameAs: ["https://github.com/dyatko/volvo-charging"],
-    },
-  ],
-};
+function buildJsonLd(siteUrl: string) {
+  return {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "WebApplication",
+        "@id": `${siteUrl}/#app`,
+        name: "EV Charging History",
+        applicationCategory: "UtilityApplication",
+        operatingSystem: "Web",
+        description:
+          "Mobile-first dashboard for your Volvo's state of charge, charging session history, and live location. Built on Volvo's official Connected Vehicle, Energy, and Location APIs.",
+        offers: { "@type": "Offer", price: "0", priceCurrency: "EUR" },
+        publisher: { "@id": `${siteUrl}/#org` },
+      },
+      {
+        "@type": "WebSite",
+        "@id": `${siteUrl}/#website`,
+        url: siteUrl,
+        name: "EV Charging History",
+        description:
+          "Live charging status and session log for your Volvo, built on Volvo's official APIs.",
+        publisher: { "@id": `${siteUrl}/#org` },
+        inLanguage: "en",
+      },
+      {
+        "@type": "Organization",
+        "@id": `${siteUrl}/#org`,
+        name: "EV Charging History",
+        url: siteUrl,
+        logo: `${siteUrl}/icon.svg`,
+        sameAs: ["https://github.com/dyatko/volvo-charging"],
+      },
+    ],
+  };
+}
 
 export default async function Home({ searchParams }: { searchParams: Search }) {
   const session = await getSession();
@@ -75,6 +77,7 @@ export default async function Home({ searchParams }: { searchParams: Search }) {
   const { oauth_error, mode, deleted } = await searchParams;
   const isDev = process.env.NODE_ENV !== "production";
   const showTestToken = isDev && mode === "test";
+  const jsonLd = buildJsonLd(publicOriginFromHeaders(await headers()));
 
   return (
     <main className="mx-auto w-full max-w-3xl flex-1 px-6 py-10">

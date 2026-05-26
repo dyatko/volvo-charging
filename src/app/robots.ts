@@ -1,6 +1,9 @@
 import type { MetadataRoute } from "next";
+import { headers } from "next/headers";
+import { publicOriginFromHeaders } from "@/lib/origin";
 
-export default function robots(): MetadataRoute.Robots {
+export default async function robots(): Promise<MetadataRoute.Robots> {
+  const base = publicOriginFromHeaders(await headers());
   return {
     rules: [
       {
@@ -11,6 +14,6 @@ export default function robots(): MetadataRoute.Robots {
         disallow: ["/dashboard", "/api/"],
       },
     ],
-    sitemap: `${process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"}/sitemap.xml`,
+    sitemap: `${base}/sitemap.xml`,
   };
 }
