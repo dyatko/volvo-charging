@@ -2,9 +2,13 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { headers } from "next/headers";
+import { count } from "drizzle-orm";
 import { getSession } from "@/lib/session";
 import { publicOriginFromHeaders } from "@/lib/origin";
 import { TestTokenForm } from "@/components/test-token-form";
+import { StickySignIn } from "@/components/sticky-sign-in";
+import { db } from "@/db/client";
+import { chargingSessions, vehicles } from "@/db/schema";
 
 // Canonicalize the landing on `/` so query-string variants
 // (?mode=test, ?oauth_error=…, ?deleted=1) don't fragment the index.
@@ -16,18 +20,22 @@ type Search = Promise<{ oauth_error?: string; mode?: string; deleted?: string }>
 
 const features = [
   {
+    emoji: "🔋",
     title: "Live state of charge",
     body: "Battery %, target SOC, plug status, real-time charging power. Auto-refreshes while the tab is open.",
   },
   {
+    emoji: "📊",
     title: "Session history",
     body: "Every plug-in becomes a row: duration, energy delivered, peak power, start and end location. Derived from your car, not entered by hand.",
   },
   {
+    emoji: "📍",
     title: "Where it charged",
     body: "Coordinates captured from Volvo's Location API at the moment you plug in and unplug, so a charge at home and one at a supercharger don't blur together.",
   },
   {
+    emoji: "🚗",
     title: "All your Volvos",
     body: "If your Volvo ID owns multiple cars, they all show up in the switcher and get polled in parallel. No extra config.",
   },
@@ -70,6 +78,16 @@ function buildJsonLd(siteUrl: string) {
   };
 }
 
+async function loadPublicStats(): Promise<{ sessions: number; vehicles: number } | null> {
+  try {
+    const [sessionsRow] = await db.select({ n: count() }).from(chargingSessions);
+    const [vehiclesRow] = await db.select({ n: count() }).from(vehicles);
+    return { sessions: sessionsRow?.n ?? 0, vehicles: vehiclesRow?.n ?? 0 };
+  } catch {
+    return null;
+  }
+}
+
 export default async function Home({ searchParams }: { searchParams: Search }) {
   const session = await getSession();
   if (session.userId) redirect("/dashboard");
@@ -78,6 +96,7 @@ export default async function Home({ searchParams }: { searchParams: Search }) {
   const isDev = process.env.NODE_ENV !== "production";
   const showTestToken = isDev && mode === "test";
   const jsonLd = buildJsonLd(publicOriginFromHeaders(await headers()));
+  const stats = await loadPublicStats();
 
   return (
     <main className="mx-auto w-full max-w-3xl flex-1 px-6 py-10">
@@ -148,12 +167,34 @@ export default async function Home({ searchParams }: { searchParams: Search }) {
             className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
           >
             <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-50">
+              <span className="mr-1.5" aria-hidden>
+                {f.emoji}
+              </span>
               {f.title}
             </h2>
             <p className="mt-1.5 text-sm leading-6 text-zinc-600 dark:text-zinc-400">{f.body}</p>
           </article>
         ))}
       </section>
+
+      {/* Live stats ───────────────────────────────────────────────── */}
+      {stats && stats.vehicles > 0 ? (
+        <section className="mt-14 flex flex-col items-center gap-2 text-center">
+          <p className="text-xs font-medium uppercase tracking-[0.2em] text-zinc-500 dark:text-zinc-400">
+            So far
+          </p>
+          <p className="text-balance text-lg leading-snug text-zinc-700 dark:text-zinc-300 sm:text-xl">
+            <span className="tabular-nums font-semibold text-zinc-900 dark:text-zinc-50">
+              {stats.sessions.toLocaleString("en-US")}
+            </span>{" "}
+            charging session{stats.sessions === 1 ? "" : "s"} tracked across{" "}
+            <span className="tabular-nums font-semibold text-zinc-900 dark:text-zinc-50">
+              {stats.vehicles.toLocaleString("en-US")}
+            </span>{" "}
+            {stats.vehicles === 1 ? "Volvo" : "Volvos"}.
+          </p>
+        </section>
+      ) : null}
 
       {/* Trust / scope ────────────────────────────────────────────── */}
       <section className="mt-14 rounded-xl border border-zinc-200 bg-white p-5 text-sm leading-6 text-zinc-600 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400">
@@ -184,14 +225,10 @@ export default async function Home({ searchParams }: { searchParams: Search }) {
           EX40, EX90) and recent PHEVs (XC60 / S90 / V90 MY2022+, XC90 / S60 / V60
           MY2023+).
         </p>
-      </section>
-
-      {/* Open source closer ───────────────────────────────────────── */}
-      <section className="mt-14 rounded-xl border border-zinc-200 bg-white p-5 text-center text-sm shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-        <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-50">
+        <h3 className="mt-6 text-base font-semibold text-zinc-900 dark:text-zinc-50">
           Open source — nothing to hide
-        </h2>
-        <p className="mt-2 text-zinc-600 dark:text-zinc-400">
+        </h3>
+        <p className="mt-2">
           Every line of code that touches your Volvo data is public. Read it, audit the
           OAuth scopes, run your own copy. No analytics, no trackers, no ad networks.
         </p>
@@ -204,20 +241,25 @@ export default async function Home({ searchParams }: { searchParams: Search }) {
           View on GitHub →
         </a>
       </section>
+
+      {!showTestToken ? <StickySignIn /> : null}
     </main>
   );
 }
 
 function OAuthSignIn() {
   return (
-    <div className="mt-4 rounded-xl border border-zinc-200 bg-white p-6 text-sm shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
+    <div
+      id="hero-cta"
+      className="mt-4 rounded-xl border border-zinc-200 bg-white p-6 text-sm shadow-sm dark:border-zinc-800 dark:bg-zinc-950"
+    >
       <p className="text-zinc-600 dark:text-zinc-400">
         You&apos;ll be sent to Volvo&apos;s sign-in page. After approving access, you&apos;ll
         land back on your dashboard with your live charging state ready.
       </p>
       <a
         href="/api/auth/start"
-        className="mt-5 inline-flex w-full items-center justify-center rounded-lg bg-zinc-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
+        className="mt-5 inline-flex w-full items-center justify-center rounded-lg bg-zinc-900 px-4 py-3.5 text-base font-semibold text-white shadow-lg shadow-zinc-900/15 ring-1 ring-zinc-900/5 transition hover:-translate-y-px hover:bg-zinc-800 hover:shadow-xl dark:bg-zinc-100 dark:text-zinc-900 dark:shadow-zinc-100/10 dark:ring-white/10 dark:hover:bg-zinc-200"
       >
         Sign in with Volvo ID →
       </a>
