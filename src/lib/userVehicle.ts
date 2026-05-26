@@ -20,6 +20,7 @@ export type VehicleRow = {
   currentLat: number | null;
   currentLng: number | null;
   locationUpdatedAt: Date | null;
+  lastSeenAt: Date | null;
 };
 
 export type ApiKind = "energy" | "conve" | "location";
@@ -152,6 +153,7 @@ export async function loadUserContext(userId: string): Promise<UserContext | nul
       currentLat: vehicles.currentLat,
       currentLng: vehicles.currentLng,
       locationUpdatedAt: vehicles.locationUpdatedAt,
+      lastSeenAt: vehicles.lastSeenAt,
     })
     .from(vehicles)
     .where(eq(vehicles.userId, userId))

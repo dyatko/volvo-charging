@@ -202,7 +202,7 @@ export default async function DashboardPage() {
           </p>
         ) : null}
         <p className="text-xs text-zinc-500">
-          Updated {fmtRelative(latest?.observedAt ?? null) ?? "—"}
+          Updated {fmtRelative(active.lastSeenAt ?? latest?.observedAt ?? null) ?? "—"}
         </p>
       </section>
 
