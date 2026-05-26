@@ -5,6 +5,7 @@ import { volvoCredentials, volvoTokens } from "@/db/schema";
 import { decrypt } from "@/lib/crypto";
 import { revokeToken } from "@/lib/oauth";
 import { getSession } from "@/lib/session";
+import { publicUrl } from "@/lib/origin";
 
 export async function POST(req: Request) {
   const session = await getSession();
@@ -36,5 +37,5 @@ export async function POST(req: Request) {
   }
 
   session.destroy();
-  return NextResponse.redirect(new URL("/", req.url), { status: 303 });
+  return NextResponse.redirect(publicUrl(req, "/"), { status: 303 });
 }

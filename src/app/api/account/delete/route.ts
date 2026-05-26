@@ -5,6 +5,7 @@ import { users, volvoCredentials, volvoTokens } from "@/db/schema";
 import { decrypt } from "@/lib/crypto";
 import { revokeToken } from "@/lib/oauth";
 import { getSession } from "@/lib/session";
+import { publicUrl } from "@/lib/origin";
 
 /**
  * Hard-deletes the signed-in user: revokes their Volvo refresh token, then
@@ -41,5 +42,5 @@ export async function POST(req: Request) {
   await db.delete(users).where(eq(users.id, userId));
 
   session.destroy();
-  return NextResponse.redirect(new URL("/?deleted=1", req.url), { status: 303 });
+  return NextResponse.redirect(publicUrl(req, "/?deleted=1"), { status: 303 });
 }

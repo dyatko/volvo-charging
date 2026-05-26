@@ -6,6 +6,7 @@ import { users, volvoCredentials, volvoTokens } from "@/db/schema";
 import { encrypt } from "@/lib/crypto";
 import { getSession } from "@/lib/session";
 import { bootstrapVehiclesFromConve } from "@/lib/vehicleBootstrap";
+import { publicUrl } from "@/lib/origin";
 
 // Each token is the access_token from a separate test-access-token page
 // in Volvo's developer portal (one per API).
@@ -137,7 +138,7 @@ export async function POST(req: Request) {
   session.userId = userRow.id;
   await session.save();
 
-  const url = new URL("/dashboard", req.url);
+  const url = publicUrl(req, "/dashboard");
   if (conveError) url.searchParams.set("conve_err", conveError);
   return NextResponse.redirect(url, { status: 303 });
 }

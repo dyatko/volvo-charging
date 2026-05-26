@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSession } from "@/lib/session";
 import { startAuthCodeFlow } from "@/lib/oauth";
+import { publicOrigin, publicUrl } from "@/lib/origin";
 
 const Form = z.object({
   clientId: z.string().min(1, "client_id is required"),
@@ -23,7 +24,7 @@ export async function POST(req: Request) {
     );
   }
 
-  const origin = new URL(req.url).origin;
+  const origin = publicOrigin(req);
   const redirectUri = `${origin}/api/auth/callback`;
 
   let started;
@@ -35,11 +36,11 @@ export async function POST(req: Request) {
     });
   } catch (e) {
     return NextResponse.redirect(
-      new URL(
+      publicUrl(
+        req,
         `/?oauth_error=${encodeURIComponent(
           `discovery failed: ${e instanceof Error ? e.message : String(e)}`,
         )}`,
-        req.url,
       ),
       { status: 303 },
     );

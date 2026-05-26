@@ -6,10 +6,11 @@ import { encrypt } from "@/lib/crypto";
 import { getSession } from "@/lib/session";
 import { exchangeAuthorizationCode } from "@/lib/oauth";
 import { bootstrapVehiclesFromConve } from "@/lib/vehicleBootstrap";
+import { publicUrl } from "@/lib/origin";
 
 function redirectWithError(req: Request, message: string) {
   return NextResponse.redirect(
-    new URL(`/?oauth_error=${encodeURIComponent(message)}`, req.url),
+    publicUrl(req, `/?oauth_error=${encodeURIComponent(message)}`),
     { status: 303 },
   );
 }
@@ -17,7 +18,11 @@ function redirectWithError(req: Request, message: string) {
 export async function GET(req: Request) {
   const session = await getSession();
   const pending = session.pending;
-  const currentUrl = new URL(req.url);
+  // openid-client compares this URL's origin against the saved redirect_uri
+  // when verifying the code grant. Use the public origin so it matches what
+  // we registered with Volvo, not the container's internal bind.
+  const reqUrl = new URL(req.url);
+  const currentUrl = new URL(reqUrl.pathname + reqUrl.search, publicUrl(req, "/"));
 
   const oauthError = currentUrl.searchParams.get("error");
   if (oauthError) {
@@ -118,5 +123,5 @@ export async function GET(req: Request) {
   delete session.pending;
   await session.save();
 
-  return NextResponse.redirect(new URL("/dashboard", req.url), { status: 303 });
+  return NextResponse.redirect(publicUrl(req, "/dashboard"), { status: 303 });
 }
