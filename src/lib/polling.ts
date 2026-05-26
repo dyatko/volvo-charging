@@ -3,6 +3,7 @@ import { db } from "@/db/client";
 import { chargingSessions, stateSnapshots, vehicles } from "@/db/schema";
 import { makeEnergyClient, makeLocationClient, pointToLatLng, type VolvoCreds } from "@/lib/volvo/client";
 import { readField } from "@/lib/volvo/state";
+import { withRetry } from "@/lib/volvo/retry";
 import type { UserContext } from "@/lib/userVehicle";
 
 type SnapshotRow = typeof stateSnapshots.$inferInsert;
@@ -55,9 +56,9 @@ export async function pollOne(opts: {
   batteryCapacityKwh: number | null;
 }): Promise<PollOutcome> {
   const energy = makeEnergyClient(opts.energyCreds);
-  const { data, error, response } = await energy.GET("/vehicles/{vin}/state", {
-    params: { path: { vin: opts.vin } },
-  });
+  const { data, error, response } = await withRetry(() =>
+    energy.GET("/vehicles/{vin}/state", { params: { path: { vin: opts.vin } } }),
+  );
   if (error || !data) {
     return { ok: false, reason: JSON.stringify(error ?? "unknown"), status: response?.status };
   }
@@ -120,16 +121,6 @@ export async function pollOne(opts: {
     prev.targetSoc === next.targetSoc &&
     prev.currentLimitA === next.currentLimitA;
 
-  // Refresh "current location" every poll when we have a Location token —
-  // this is what the dashboard reads to show where the car is right now.
-  // Charging-session boundaries also use Location calls separately below; in
-  // practice those resolve to the same value within the same poll so the
-  // extra call is only here on every-poll cadence.
-  let liveLocation: { lat: number; lng: number } | null = null;
-  if (opts.locationCreds) {
-    liveLocation = await fetchLocation(opts.vin, opts.locationCreds);
-  }
-
   // Always bump vehicle.last_seen + next_poll regardless of dedup.
   await db
     .update(vehicles)
@@ -137,13 +128,6 @@ export async function pollOne(opts: {
       lastSeenAt: new Date(),
       nextPollAt: new Date(Date.now() + 60_000),
       consecutiveFailures: 0,
-      ...(liveLocation
-        ? {
-            currentLat: liveLocation.lat,
-            currentLng: liveLocation.lng,
-            locationUpdatedAt: new Date(),
-          }
-        : {}),
     })
     .where(eq(vehicles.vin, opts.vin));
 
@@ -153,6 +137,25 @@ export async function pollOne(opts: {
 
   // Insert (idempotent on (vin, observed_at) unique index).
   await db.insert(stateSnapshots).values(next).onConflictDoNothing();
+
+  // Refresh "current location" only when something observable actually
+  // changed. For a parked car this fires roughly once a day; for a charging
+  // car it fires when SOC ticks (every few %). Sticks to Volvo's 10k/day
+  // app-wide quota even with many users.
+  let liveLocation: { lat: number; lng: number } | null = null;
+  if (opts.locationCreds) {
+    liveLocation = await fetchLocation(opts.vin, opts.locationCreds);
+    if (liveLocation) {
+      await db
+        .update(vehicles)
+        .set({
+          currentLat: liveLocation.lat,
+          currentLng: liveLocation.lng,
+          locationUpdatedAt: new Date(),
+        })
+        .where(eq(vehicles.vin, opts.vin));
+    }
+  }
 
   // Derive session transitions.
   //
@@ -235,9 +238,9 @@ export async function pollOne(opts: {
 async function fetchLocation(vin: string, creds: VolvoCreds) {
   try {
     const client = makeLocationClient(creds);
-    const { data } = await client.GET("/v1/vehicles/{vin}/location", {
-      params: { path: { vin } },
-    });
+    const { data } = await withRetry(() =>
+      client.GET("/v1/vehicles/{vin}/location", { params: { path: { vin } } }),
+    );
     return pointToLatLng(data?.data?.geometry?.coordinates);
   } catch {
     return null;

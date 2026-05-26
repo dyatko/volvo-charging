@@ -68,3 +68,34 @@ export async function refreshAccessToken(opts: {
   const config = await discoverVolvo(opts.clientId, opts.clientSecret);
   return oidc.refreshTokenGrant(config, opts.refreshToken);
 }
+
+/**
+ * Best-effort token revocation at Volvo. Per RFC 7009, revoke endpoint
+ * returns 200 even for invalid tokens, so failures only matter as
+ * telemetry. Pingfederate (Volvo's IDP) exposes the revoke endpoint at
+ * /as/revoke_token.oauth2.
+ */
+export async function revokeToken(opts: {
+  clientId: string;
+  clientSecret: string;
+  token: string;
+  tokenTypeHint?: "access_token" | "refresh_token";
+}): Promise<void> {
+  const body = new URLSearchParams({
+    token: opts.token,
+    ...(opts.tokenTypeHint ? { token_type_hint: opts.tokenTypeHint } : {}),
+  });
+  const auth = Buffer.from(`${opts.clientId}:${opts.clientSecret}`).toString("base64");
+  try {
+    await fetch("https://volvoid.eu.volvocars.com/as/revoke_token.oauth2", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        Authorization: `Basic ${auth}`,
+      },
+      body,
+    });
+  } catch (e) {
+    console.error("token revoke failed (non-fatal)", e instanceof Error ? e.message : String(e));
+  }
+}

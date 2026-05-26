@@ -9,6 +9,7 @@ import { loadUserContext } from "@/lib/userVehicle";
 import { pollAllVehicles } from "@/lib/polling";
 import { RefreshButton } from "@/components/refresh-button";
 import { AutoRefresh } from "@/components/auto-refresh";
+import { DangerZone } from "@/components/danger-zone";
 
 function fmtSessionDuration(startedAt: Date, endedAt: Date | null): string {
   const end = endedAt ?? new Date();
@@ -281,6 +282,8 @@ export default async function DashboardPage() {
           Polling {ctx.vehicles.length} vehicles · use the switcher in the header to view another.
         </p>
       ) : null}
+
+      <DangerZone />
     </main>
   );
 }

@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db/client";
 import { users, vehicles } from "@/db/schema";
 import { makeConveClient, type VolvoCreds } from "@/lib/volvo/client";
+import { withRetry } from "@/lib/volvo/retry";
 import type { components as ConveComponents } from "@/lib/volvo/conve.gen";
 
 type VehicleDetails = ConveComponents["schemas"]["VehicleDetails"];
@@ -68,7 +69,7 @@ export async function bootstrapVehiclesFromConve(opts: {
   conveCreds: VolvoCreds;
 }): Promise<string[]> {
   const conve = makeConveClient(opts.conveCreds);
-  const list = await conve.GET("/vehicles");
+  const list = await withRetry(() => conve.GET("/vehicles"));
   const vins = list.data?.data?.map((v) => v.vin).filter((v): v is string => !!v) ?? [];
   if (vins.length === 0) return [];
 
@@ -76,7 +77,9 @@ export async function bootstrapVehiclesFromConve(opts: {
   for (const vin of vins) {
     let details: VehicleDetails | undefined;
     try {
-      const r = await conve.GET("/vehicles/{vin}", { params: { path: { vin } } });
+      const r = await withRetry(() =>
+        conve.GET("/vehicles/{vin}", { params: { path: { vin } } }),
+      );
       details = unwrapDetails(r.data);
     } catch {
       // Keep VIN-only row.
@@ -99,7 +102,9 @@ export async function upsertSingleVehicle(opts: {
   let conveError: string | null = null;
   if (opts.conveCreds) {
     const conve = makeConveClient(opts.conveCreds);
-    const r = await conve.GET("/vehicles/{vin}", { params: { path: { vin: opts.vin } } });
+    const r = await withRetry(() =>
+      conve.GET("/vehicles/{vin}", { params: { path: { vin: opts.vin } } }),
+    );
     if (r.error) conveError = `details fetch failed: HTTP ${r.response.status}`;
     else details = unwrapDetails(r.data);
   }
