@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
-# One-shot GCP bootstrap for Volvo Charging.
+# One-shot GCP bootstrap for Volvo Charging — Stockholm (europe-north1).
 #
 # Run with `bash infra/bootstrap.sh` after editing the variables below.
 # Idempotent: every step is safe to re-run.
 #
-# Region: europe-north1 (Stockholm) for everything that's regional.
-# Goal: stay inside GCP's always-free tier. Database lives outside GCP on
-# Neon's free plan (eu-north-1 Stockholm) because Cloud SQL has no free
-# tier.
+# All resources stay in GCP. Postgres lives on Cloud SQL (db-f1-micro,
+# zonal, no HA, no backups) — that's the only Postgres option on GCP and
+# it costs ~$9/month in europe-north1. Everything else (Cloud Run,
+# Artifact Registry, Scheduler, Secret Manager, WIF) sits comfortably
+# inside the always-free tier at hobby scale.
 
 set -euo pipefail
 
@@ -16,6 +17,9 @@ PROJECT_ID="volvo-charging-app"      # globally unique
 GITHUB_REPO="dyatko/volvo-charging"  # owner/repo
 REGION="europe-north1"
 AR_REPO="volvo-charging"
+SQL_INSTANCE="volvo-db"
+DB_NAME="volvo"
+DB_USER="volvo"
 # ───────────────────────────────────────────────────────────────────────
 
 echo "→ Setting active project to $PROJECT_ID"
@@ -28,6 +32,7 @@ gcloud services enable \
   artifactregistry.googleapis.com \
   cloudscheduler.googleapis.com \
   secretmanager.googleapis.com \
+  sqladmin.googleapis.com \
   iamcredentials.googleapis.com \
   sts.googleapis.com
 
@@ -52,26 +57,23 @@ APP_SA="app@$PROJECT_ID.iam.gserviceaccount.com"
 DEPLOYER_SA="deployer@$PROJECT_ID.iam.gserviceaccount.com"
 SCHEDULER_SA="scheduler@$PROJECT_ID.iam.gserviceaccount.com"
 
-echo "→ Granting roles to deployer (build + deploy + read secrets for migrate)"
-for role in \
-  roles/artifactregistry.writer \
-  roles/run.admin \
-  roles/iam.serviceAccountUser \
-  roles/secretmanager.secretAccessor
-do
+echo "→ Granting roles"
+grant() {
+  local sa="$1" role="$2"
   gcloud projects add-iam-policy-binding "$PROJECT_ID" \
-    --member="serviceAccount:$DEPLOYER_SA" \
+    --member="serviceAccount:$sa" \
     --role="$role" \
     --condition=None \
     --quiet >/dev/null
+}
+# deployer: build + push + deploy + read secrets + connect to Cloud SQL for migrations
+for r in roles/artifactregistry.writer roles/run.admin roles/iam.serviceAccountUser \
+         roles/secretmanager.secretAccessor roles/cloudsql.client; do
+  grant "$DEPLOYER_SA" "$r"
 done
-
-echo "→ Granting Secret Manager accessor to app SA"
-gcloud projects add-iam-policy-binding "$PROJECT_ID" \
-  --member="serviceAccount:$APP_SA" \
-  --role="roles/secretmanager.secretAccessor" \
-  --condition=None \
-  --quiet >/dev/null
+# app: read secrets at runtime + connect to Cloud SQL via the built-in proxy
+grant "$APP_SA" roles/secretmanager.secretAccessor
+grant "$APP_SA" roles/cloudsql.client
 
 echo "→ Setting up Workload Identity Federation for GitHub"
 gcloud iam workload-identity-pools describe github --location=global >/dev/null 2>&1 || \
@@ -96,47 +98,86 @@ gcloud iam service-accounts add-iam-policy-binding "$DEPLOYER_SA" \
 
 WIF_PROVIDER="projects/$PROJECT_NUMBER/locations/global/workloadIdentityPools/github/providers/github-provider"
 
-echo "→ Creating secrets in $REGION (skipping ones that exist)"
-create_secret() {
-  local name="$1"
-  if gcloud secrets describe "$name" >/dev/null 2>&1; then
-    echo "    $name already exists, skipping"
+echo "→ Provisioning Cloud SQL ($SQL_INSTANCE, Postgres 16, db-f1-micro, zonal)"
+echo "    NOTE: first-time creation takes 5–10 minutes."
+if gcloud sql instances describe "$SQL_INSTANCE" >/dev/null 2>&1; then
+  echo "    $SQL_INSTANCE already exists, skipping"
+else
+  gcloud sql instances create "$SQL_INSTANCE" \
+    --database-version=POSTGRES_16 \
+    --tier=db-f1-micro \
+    --region="$REGION" \
+    --availability-type=zonal \
+    --storage-size=10GB \
+    --storage-type=SSD \
+    --no-storage-auto-increase \
+    --no-backup \
+    --deletion-protection
+fi
+
+echo "→ Ensuring database '$DB_NAME' exists"
+gcloud sql databases describe "$DB_NAME" --instance="$SQL_INSTANCE" >/dev/null 2>&1 || \
+  gcloud sql databases create "$DB_NAME" --instance="$SQL_INSTANCE"
+
+# Auto-generate password and create/reset user. We do this only when the
+# DB_PASSWORD secret doesn't already exist — re-running the script is
+# non-destructive.
+INSTANCE_CONNECTION_NAME="${PROJECT_ID}:${REGION}:${SQL_INSTANCE}"
+
+ensure_secret_text() {
+  local name="$1" value="$2"
+  if ! gcloud secrets describe "$name" >/dev/null 2>&1; then
+    gcloud secrets create "$name" --replication-policy=user-managed --locations="$REGION" >/dev/null
+  fi
+  if ! gcloud secrets versions access latest --secret="$name" >/dev/null 2>&1; then
+    printf '%s' "$value" | gcloud secrets versions add "$name" --data-file=- >/dev/null
+    echo "    Wrote $name (new version)"
   else
-    gcloud secrets create "$name" \
-      --replication-policy=user-managed \
-      --locations="$REGION"
-    echo "    Created $name (empty — add a version with:"
-    echo "      echo -n 'value' | gcloud secrets versions add $name --data-file=-)"
+    echo "    $name already has a version, leaving as-is"
   fi
 }
-create_secret SESSION_SECRET
-create_secret DATA_ENCRYPTION_KEK
-create_secret DATABASE_URL
+
+if gcloud secrets describe DB_PASSWORD >/dev/null 2>&1 && \
+   gcloud secrets versions access latest --secret=DB_PASSWORD >/dev/null 2>&1; then
+  echo "→ DB_PASSWORD secret already set, reusing"
+  DB_PASSWORD=$(gcloud secrets versions access latest --secret=DB_PASSWORD)
+else
+  echo "→ Generating Postgres user password (alphanumeric, 32 chars)"
+  DB_PASSWORD=$(LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c 32)
+  ensure_secret_text DB_PASSWORD "$DB_PASSWORD"
+fi
+
+# Create or update the user. `users create` errors if it exists; we set
+# password unconditionally via `users set-password` to be safe.
+if ! gcloud sql users list --instance="$SQL_INSTANCE" --format='value(name)' | grep -qx "$DB_USER"; then
+  gcloud sql users create "$DB_USER" --instance="$SQL_INSTANCE" --password="$DB_PASSWORD"
+else
+  echo "    User $DB_USER already exists — leaving its password as-is (re-set manually if you regenerated DB_PASSWORD)"
+fi
+
+echo "→ Populating Secret Manager"
+ensure_secret_text SESSION_SECRET "$(openssl rand -base64 48 | tr -d '\n')"
+ensure_secret_text DATA_ENCRYPTION_KEK "$(openssl rand -base64 48 | tr -d '\n')"
+# Runtime DATABASE_URL — Cloud Run will mount Cloud SQL at /cloudsql/<instance>
+# via --add-cloudsql-instances, and node-postgres connects via that Unix
+# socket using the `host` query param.
+ensure_secret_text DATABASE_URL "postgresql://${DB_USER}:${DB_PASSWORD}@/${DB_NAME}?host=/cloudsql/${INSTANCE_CONNECTION_NAME}"
 
 echo ""
 echo "✓ Bootstrap complete."
 echo ""
-echo "Next steps (manual):"
+echo "Add these as GitHub repository variables"
+echo "  (Settings → Secrets and variables → Actions → Variables):"
 echo ""
-echo "  1. Sign up at https://neon.tech, create a project in AWS eu-north-1 (Stockholm),"
-echo "     create a database named 'volvo', copy the connection string, then:"
+echo "    GCP_PROJECT_ID      = $PROJECT_ID"
+echo "    GCP_PROJECT_NUMBER  = $PROJECT_NUMBER"
+echo "    GCP_DEPLOYER_SA     = $DEPLOYER_SA"
+echo "    GCP_WIF_PROVIDER    = $WIF_PROVIDER"
 echo ""
-echo "       echo -n 'postgres://user:pass@ep-...neon.tech/volvo?sslmode=require' \\"
-echo "         | gcloud secrets versions add DATABASE_URL --data-file=-"
+echo "Then push any commit to main — the Deploy workflow will build, run"
+echo "drizzle migrations against Cloud SQL via cloud-sql-proxy, deploy to"
+echo "Cloud Run with --add-cloudsql-instances, smoke-test /healthz, and"
+echo "flip traffic."
 echo ""
-echo "  2. Generate session/encryption secrets (32+ chars each):"
-echo ""
-echo "       openssl rand -base64 48 | gcloud secrets versions add SESSION_SECRET --data-file=-"
-echo "       openssl rand -base64 48 | gcloud secrets versions add DATA_ENCRYPTION_KEK --data-file=-"
-echo ""
-echo "  3. Add these as GitHub repository variables (Settings → Secrets and variables → Actions → Variables):"
-echo ""
-echo "       GCP_PROJECT_ID      = $PROJECT_ID"
-echo "       GCP_PROJECT_NUMBER  = $PROJECT_NUMBER"
-echo "       GCP_DEPLOYER_SA     = $DEPLOYER_SA"
-echo "       GCP_WIF_PROVIDER    = $WIF_PROVIDER"
-echo ""
-echo "  4. Push to main to trigger the first deploy."
-echo ""
-echo "  5. After the first deploy succeeds, run infra/scheduler.sh to create the"
-echo "     Cloud Scheduler job (it needs the live Cloud Run URL)."
+echo "After the first deploy succeeds, run infra/scheduler.sh to create"
+echo "the per-minute Cloud Scheduler tick."
