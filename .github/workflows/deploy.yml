@@ -20,7 +20,23 @@ env:
   GCP_DEPLOYER_SA: ${{ vars.GCP_DEPLOYER_SA }}     # deployer@PROJECT.iam.gserviceaccount.com
 
 jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    outputs:
+      ready: ${{ steps.check.outputs.ready }}
+    steps:
+      - id: check
+        run: |
+          if [ -n "${{ vars.GCP_PROJECT_ID }}" ] && [ -n "${{ vars.GCP_WIF_PROVIDER }}" ] && [ -n "${{ vars.GCP_DEPLOYER_SA }}" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Skipping deploy — GCP repository variables not configured yet. See README → 'Deploying to Google Cloud Run'."
+          fi
+
   deploy:
+    needs: preflight
+    if: needs.preflight.outputs.ready == 'true'
     runs-on: ubuntu-latest
     concurrency:
       group: deploy-main
@@ -60,16 +76,15 @@ jobs:
           docker push "${IMAGE%:*}:latest"
 
       - name: Run database migrations
-        env:
-          # Pulled directly from Secret Manager; never lands in repo or GHA logs.
-          # deployer SA needs roles/secretmanager.secretAccessor on DATABASE_URL.
-          DATABASE_URL: ${{ steps.fetch-db-url.outputs.value }}
-        id: fetch-db-url
+        # Pull DATABASE_URL straight from Secret Manager (deployer SA has
+        # roles/secretmanager.secretAccessor) and pass it to drizzle-kit.
+        # ::add-mask:: scrubs the value from any log line GHA emits afterwards.
         run: |
-          DATABASE_URL=$(gcloud secrets versions access latest --secret=DATABASE_URL --project=${{ env.GCP_PROJECT_ID }})
-          # Mask before exporting so step logs can't leak it.
+          DATABASE_URL=$(gcloud secrets versions access latest \
+            --secret=DATABASE_URL --project=${{ env.GCP_PROJECT_ID }})
           echo "::add-mask::$DATABASE_URL"
-          DATABASE_URL="$DATABASE_URL" pnpm db:migrate
+          export DATABASE_URL
+          pnpm db:migrate
 
       - name: Deploy to Cloud Run (no traffic)
         id: deploy

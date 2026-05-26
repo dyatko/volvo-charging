@@ -41,4 +41,6 @@ jobs:
         run: pnpm exec tsc --noEmit
 
       - name: Tests
-        run: pnpm test --run
+        # Call vitest directly: `pnpm test --run` would route `--run` to pnpm.
+        # --passWithNoTests so the suite doesn't error before we add tests.
+        run: pnpm exec vitest run --passWithNoTests
