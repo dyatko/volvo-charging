@@ -15,14 +15,6 @@ export function Footer() {
           <Link href="/terms" className="hover:text-zinc-900 dark:hover:text-zinc-100">
             Terms
           </Link>
-          <a
-            href="https://github.com/dyatko/volvo-charging"
-            target="_blank"
-            rel="noreferrer"
-            className="hover:text-zinc-900 dark:hover:text-zinc-100"
-          >
-            Source
-          </a>
         </nav>
       </div>
     </footer>

@@ -40,7 +40,8 @@ export default async function Home({ searchParams }: { searchParams: Search }) {
   if (session.userId) redirect("/dashboard");
 
   const { oauth_error, mode, deleted } = await searchParams;
-  const showTestToken = mode === "test";
+  const isDev = process.env.NODE_ENV !== "production";
+  const showTestToken = isDev && mode === "test";
 
   return (
     <main className="mx-auto w-full max-w-3xl flex-1 px-6 py-10">
@@ -59,29 +60,49 @@ export default async function Home({ searchParams }: { searchParams: Search }) {
           stitched together from Volvo&apos;s own Connected Vehicle, Energy, and Location
           APIs. Free, open source, mobile-first.
         </p>
-        <div className="mt-7 flex items-center justify-center gap-3">
-          <a
-            href="#connect"
-            className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
-          >
-            Connect your Volvo →
-          </a>
-          <a
-            href="https://github.com/dyatko/volvo-charging"
-            target="_blank"
-            rel="noreferrer"
-            className="rounded-lg border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-900"
-          >
-            View on GitHub
-          </a>
+
+        {deleted ? (
+          <div className="mx-auto mt-6 max-w-md rounded-lg border border-emerald-300 bg-emerald-50 p-3 text-sm text-emerald-900 dark:border-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-200">
+            Account deleted. Every row we had on you is gone.
+          </div>
+        ) : null}
+
+        {oauth_error ? (
+          <div className="mx-auto mt-6 max-w-md rounded-lg border border-rose-300 bg-rose-50 p-3 text-xs text-rose-900 dark:border-rose-700 dark:bg-rose-900/20 dark:text-rose-200">
+            OAuth failed: <code className="break-all">{oauth_error}</code>
+          </div>
+        ) : null}
+
+        <div className="mx-auto mt-8 max-w-md text-left">
+          {isDev ? (
+            <div className="flex justify-center gap-2 text-xs">
+              <Link
+                href="/"
+                className={
+                  "rounded-full px-3 py-1 " +
+                  (!showTestToken
+                    ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
+                    : "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300")
+                }
+              >
+                Sign in with Volvo ID
+              </Link>
+              <Link
+                href="/?mode=test"
+                className={
+                  "rounded-full px-3 py-1 " +
+                  (showTestToken
+                    ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
+                    : "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300")
+                }
+              >
+                Use test tokens
+              </Link>
+            </div>
+          ) : null}
+          {!showTestToken ? <OAuthSignIn /> : <><TestTokenIntro /><TestTokenForm /></>}
         </div>
       </section>
-
-      {deleted ? (
-        <div className="mx-auto mt-8 max-w-md rounded-lg border border-emerald-300 bg-emerald-50 p-3 text-center text-sm text-emerald-900 dark:border-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-200">
-          Account deleted. Every row we had on you is gone.
-        </div>
-      ) : null}
 
       {/* Features ─────────────────────────────────────────────────── */}
       <section className="mt-14 grid gap-4 sm:grid-cols-2">
@@ -129,48 +150,23 @@ export default async function Home({ searchParams }: { searchParams: Search }) {
         </p>
       </section>
 
-      {/* Connect ──────────────────────────────────────────────────── */}
-      <section id="connect" className="mt-14 scroll-mt-12">
-        <h2 className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
-          Connect your Volvo
+      {/* Open source closer ───────────────────────────────────────── */}
+      <section className="mt-14 rounded-xl border border-zinc-200 bg-white p-5 text-center text-sm shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+        <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-50">
+          Open source — nothing to hide
         </h2>
-        <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
-          Two paths depending on whether your developer-portal application is published
-          yet.
+        <p className="mt-2 text-zinc-600 dark:text-zinc-400">
+          Every line of code that touches your Volvo data is public. Read it, audit the
+          OAuth scopes, run your own copy. No analytics, no trackers, no ad networks.
         </p>
-
-        {oauth_error ? (
-          <div className="mt-4 rounded-lg border border-rose-300 bg-rose-50 p-3 text-xs text-rose-900 dark:border-rose-700 dark:bg-rose-900/20 dark:text-rose-200">
-            OAuth failed: <code className="break-all">{oauth_error}</code>
-          </div>
-        ) : null}
-
-        <div className="mt-5 flex gap-2 text-xs">
-          <Link
-            href="/"
-            className={
-              "rounded-full px-3 py-1 " +
-              (!showTestToken
-                ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
-                : "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300")
-            }
-          >
-            Sign in with Volvo ID
-          </Link>
-          <Link
-            href="/?mode=test#connect"
-            className={
-              "rounded-full px-3 py-1 " +
-              (showTestToken
-                ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
-                : "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300")
-            }
-          >
-            Use test tokens
-          </Link>
-        </div>
-
-        {!showTestToken ? <OAuthSignIn /> : <><TestTokenIntro /><TestTokenForm /></>}
+        <a
+          href="https://github.com/dyatko/volvo-charging"
+          target="_blank"
+          rel="noreferrer"
+          className="mt-4 inline-flex items-center gap-1.5 rounded-lg border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+        >
+          View on GitHub →
+        </a>
       </section>
     </main>
   );

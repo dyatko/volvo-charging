@@ -16,6 +16,8 @@ export type AppSession = {
   };
 };
 
+const SESSION_TTL_SECONDS = 60 * 60 * 24 * 30; // 30 days
+
 function options(): SessionOptions {
   const secret = process.env.SESSION_SECRET;
   if (!secret || secret.length < 32) {
@@ -24,11 +26,13 @@ function options(): SessionOptions {
   return {
     password: secret,
     cookieName: "volvo_charging_session",
+    ttl: SESSION_TTL_SECONDS,
     cookieOptions: {
       httpOnly: true,
       sameSite: "lax",
       secure: process.env.NODE_ENV === "production",
       path: "/",
+      maxAge: SESSION_TTL_SECONDS,
     },
   };
 }
