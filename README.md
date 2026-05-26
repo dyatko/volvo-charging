@@ -20,11 +20,12 @@ Currently in Phase 1: a local-first vertical slice that server-renders live Ener
 | Phase | |
 |---|---|
 | ✅ 1 | Local-first vertical slice: BYOC OAuth (auth-code + PKCE) via `openid-client`, Connected Vehicle bootstrap, Energy state polling on demand, session derivation with Location |
-| 2    | 1-min Cloud Scheduler tick — server-side polling without a user in the request |
-| 3    | PWA: install prompt + offline shell + Web Push for "charging complete" |
-| 4    | GitHub Actions CI (lint, typecheck, test, codegen-drift gate) |
-| 5    | Cloud Run + Cloud SQL + Cloud Scheduler bootstrap, GHA deploy via Workload Identity Federation |
-| 6    | Volvo publish approval for our app → drop BYOC requirement; custom domain |
+| ✅ 2 | GitHub Actions CI: lint, typecheck, test, codegen-drift gate, Deploy workflow with WIF auth |
+| ✅ 3 | Pre-publish hardening: 429 + Retry-After backoff, sign-out revokes Volvo refresh token, GDPR endpoints (delete account, export, disconnect vehicle), privacy + terms pages, SEO-ready landing page, rebrand to *EV Charging History* |
+| 🛠 4 | Cloud Run + Cloud SQL (`db-f1-micro` Enterprise edition, europe-north1) + Artifact Registry + Secret Manager + WIF — `infra/bootstrap.sh` provisions everything; running it now |
+| ⏳ 5 | First Cloud Run deploy through GHA + `infra/scheduler.sh` to activate the 1-min server-side tick (independent of any browser session) |
+| ⏳ 6 | PWA polish: install prompt, offline shell for `/dashboard`, Web Push notifications on session-close events |
+| ⏳ 7 | Submit the OAuth app for Volvo publish review → drop the BYOC onboarding when approved, map a custom domain (`gcloud beta run domain-mappings create`) |
 
 Full plan: `~/.claude/plans/i-want-to-build-zippy-sparkle.md`.
 
