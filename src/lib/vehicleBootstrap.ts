@@ -6,6 +6,22 @@ import type { components as ConveComponents } from "@/lib/volvo/conve.gen";
 
 type VehicleDetails = ConveComponents["schemas"]["VehicleDetails"];
 
+/**
+ * Volvo's spec says GET /vehicles/{vin} returns `VehicleDetails` directly,
+ * but the live API wraps it as `{ data: VehicleDetails }` (same shape as
+ * GET /vehicles). Unwrap defensively so we still work if Volvo ever
+ * corrects the spec.
+ */
+function unwrapDetails(body: unknown): VehicleDetails | undefined {
+  if (!body || typeof body !== "object") return undefined;
+  const obj = body as Record<string, unknown>;
+  if ("vin" in obj) return obj as VehicleDetails;
+  if ("data" in obj && obj.data && typeof obj.data === "object") {
+    return obj.data as VehicleDetails;
+  }
+  return undefined;
+}
+
 function detailsToColumns(userId: string, vin: string, d: VehicleDetails | undefined) {
   return {
     vin,
@@ -61,7 +77,7 @@ export async function bootstrapVehiclesFromConve(opts: {
     let details: VehicleDetails | undefined;
     try {
       const r = await conve.GET("/vehicles/{vin}", { params: { path: { vin } } });
-      details = r.data ?? undefined;
+      details = unwrapDetails(r.data);
     } catch {
       // Keep VIN-only row.
     }
@@ -85,7 +101,7 @@ export async function upsertSingleVehicle(opts: {
     const conve = makeConveClient(opts.conveCreds);
     const r = await conve.GET("/vehicles/{vin}", { params: { path: { vin: opts.vin } } });
     if (r.error) conveError = `details fetch failed: HTTP ${r.response.status}`;
-    else details = r.data ?? undefined;
+    else details = unwrapDetails(r.data);
   }
   await upsertVehicleRow(opts.userId, opts.vin, details);
   await setActiveIfMissing(opts.userId, opts.vin);
