@@ -1,0 +1,21 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: volvo-charging-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-volvo}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-volvo}
+      POSTGRES_DB: ${POSTGRES_DB:-volvo}
+    ports:
+      - "5432:5432"
+    volumes:
+      - volvo-charging-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-volvo} -d ${POSTGRES_DB:-volvo}"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  volvo-charging-pgdata:

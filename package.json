@@ -1,0 +1,47 @@
+{
+  "name": "volvo-charging",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "gen:energy": "openapi-typescript openapi/energy-api.json -o src/lib/volvo/energy.gen.ts",
+    "gen:conve": "openapi-typescript openapi/connected-vehicle-api.json -o src/lib/volvo/conve.gen.ts",
+    "gen:location": "openapi-typescript openapi/location-api.json -o src/lib/volvo/location.gen.ts",
+    "gen:api": "pnpm gen:energy && pnpm gen:conve && pnpm gen:location",
+    "db:up": "docker compose up -d db",
+    "db:down": "docker compose down",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "test": "vitest"
+  },
+  "dependencies": {
+    "@auth/drizzle-adapter": "^1.11.2",
+    "drizzle-orm": "^0.45.2",
+    "next": "16.2.6",
+    "next-auth": "^4.24.14",
+    "openapi-fetch": "^0.17.0",
+    "p-limit": "^7.3.0",
+    "pg": "^8.21.0",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20.19.41",
+    "@types/pg": "^8.20.0",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "drizzle-kit": "^0.31.10",
+    "eslint": "^9",
+    "eslint-config-next": "16.2.6",
+    "openapi-typescript": "^7.13.0",
+    "tailwindcss": "^4",
+    "tsx": "^4.22.3",
+    "typescript": "^5",
+    "vitest": "^4.1.7"
+  }
+}
