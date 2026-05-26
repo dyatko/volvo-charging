@@ -1,4 +1,5 @@
 import { OAuth2Client } from "google-auth-library";
+import { publicOrigin } from "@/lib/origin";
 
 let client: OAuth2Client | null = null;
 function getClient() {
@@ -34,7 +35,10 @@ export async function verifyInternalCaller(req: Request): Promise<{
   }
 
   const idToken = auth.slice(7);
-  const audience = new URL(req.url).origin;
+  // Cloud Run hands the Node process `http://0.0.0.0:8080/…` as the request URL,
+  // but the OIDC token Scheduler mints has `aud` set to the public service URL.
+  // Use the public origin (X-Forwarded-Host) so the comparison matches.
+  const audience = publicOrigin(req);
 
   try {
     const ticket = await getClient().verifyIdToken({ idToken, audience });
