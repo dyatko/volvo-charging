@@ -1,6 +1,6 @@
-# EV Charging History
+# EV Charging History — the Volvo charging history the app doesn't give you
 
-A mobile-first PWA where Volvo owners sign in and see their car's **current charging status** plus **derived charging-session history** with start/end locations — built on Volvo's public APIs.
+A mobile-first PWA where Volvo owners sign in and see **every charging session their car has ever had** — home, work, public, everywhere — with start/end locations, kWh delivered, and duration. Fills the gap left by the Volvo Cars app, which only logs sessions at Volvo's Public Charging partners. Built on Volvo's public APIs.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
 
@@ -10,7 +10,9 @@ Live at **https://ev.marat.online** — Cloud Run in `europe-north1` (Stockholm)
 
 ## Why?
 
-Volvo's in-car displays and the Volvo Cars app show the **current** charging state — there's no built-in answer to "when did I plug in, where, for how long, and how many kWh did I add?" This app fills the gap by stitching together Volvo's official Connected Vehicle, Energy, and Location APIs into a per-session log you can scroll through, export, or delete.
+The Volvo Cars app shows the **current** charging state and a *Public Charging* history — but the latter only covers sessions at the public chargers Volvo has a payment partnership with. Plug in at home, at work, at a friend's place, or at any of the dozens of CPOs Volvo doesn't have a deal with, and there's no record of it anywhere: no kWh delivered, no start/end time, no location, no answer to "when did I plug in, where, for how long, and how many kWh did I add?"
+
+This app fills that gap. It polls Volvo's official Connected Vehicle, Energy, and Location APIs every minute and derives a per-session log — every plug-in interval, regardless of where you charged or who runs the charger — that you can scroll through, export as JSON, or delete on demand.
 
 It's a personal project, free, open source, and intentionally narrow in scope. Not affiliated with Volvo in any way.
 

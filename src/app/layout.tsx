@@ -27,39 +27,44 @@ export async function generateMetadata(): Promise<Metadata> {
   return {
     metadataBase: new URL(siteUrl),
     title: {
-      default: "EV Charging History — live charging status & session log for your Volvo",
+      default: "Volvo charging history — every session your Volvo app doesn't show",
       template: "%s",
     },
     description:
-      "Track your Volvo's state of charge, session-by-session energy history, and live location in one mobile-first dashboard. Connects to Volvo's official Connected Vehicle, Energy, and Location APIs.",
+      "See your Volvo's full charging history: every plug-in session, every kWh, every location. Fills the gap in the Volvo Cars app, which only logs Public Charging partner sessions. Built on Volvo's official Connected Vehicle, Energy, and Location APIs.",
     applicationName: "EV Charging History",
     authors: [{ name: "Marat Dyatko" }],
     keywords: [
-      "EV charging history",
-      "EV charging log",
       "Volvo charging history",
+      "Volvo app charging history",
+      "Volvo charging session history",
+      "Volvo charging log",
+      "Volvo home charging history",
+      "Volvo Public Charging alternative",
+      "Volvo Cars app missing feature",
       "Volvo EV dashboard",
       "Volvo state of charge",
       "Volvo Energy API",
       "Volvo Connected Vehicle API",
-      "Volvo XC40 Recharge charging",
-      "Volvo EX30 charging app",
+      "Volvo EX30 charging history",
+      "Volvo XC40 Recharge charging history",
+      "Volvo EX90 charging history",
     ],
     openGraph: {
       type: "website",
       siteName: "EV Charging History",
-      title: "EV Charging History — live charging status & session log for your Volvo",
+      title: "Volvo charging history — every session your Volvo app doesn't show",
       description:
-        "Mobile-first dashboard for your Volvo's state of charge, charging sessions, and live location. Built on Volvo's official Connected Vehicle, Energy, and Location APIs.",
+        "Every plug-in, every kWh, every location. The charging history the Volvo Cars app doesn't give you — built on Volvo's official Connected Vehicle, Energy, and Location APIs.",
       url: siteUrl,
       locale: "en_US",
       // Image is auto-picked up from src/app/opengraph-image.tsx (file convention).
     },
     twitter: {
       card: "summary_large_image",
-      title: "EV Charging History",
+      title: "Volvo charging history — every session your Volvo app doesn't show",
       description:
-        "Live charging status and session log for your Volvo. Built on Volvo's official APIs.",
+        "Every plug-in, every kWh, every location. The charging history the Volvo Cars app doesn't give you — built on Volvo's official APIs.",
       // Image is auto-picked up from src/app/opengraph-image.tsx (file convention).
     },
     robots: { index: true, follow: true },

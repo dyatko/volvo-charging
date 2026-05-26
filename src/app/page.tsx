@@ -53,7 +53,7 @@ function buildJsonLd(siteUrl: string) {
         applicationCategory: "UtilityApplication",
         operatingSystem: "Web",
         description:
-          "Mobile-first dashboard for your Volvo's state of charge, charging session history, and live location. Built on Volvo's official Connected Vehicle, Energy, and Location APIs.",
+          "Charging history for your Volvo — every plug-in session, energy delivered, and location. Fills the gap in the Volvo Cars app, which only logs sessions at Volvo's Public Charging partners. Built on Volvo's official Connected Vehicle, Energy, and Location APIs.",
         offers: { "@type": "Offer", price: "0", priceCurrency: "EUR" },
         publisher: { "@id": `${siteUrl}/#org` },
       },
@@ -63,7 +63,7 @@ function buildJsonLd(siteUrl: string) {
         url: siteUrl,
         name: "EV Charging History",
         description:
-          "Live charging status and session log for your Volvo, built on Volvo's official APIs.",
+          "Volvo charging history — every session, every kWh, every location. The session log the Volvo app doesn't give you, built on Volvo's official APIs.",
         publisher: { "@id": `${siteUrl}/#org` },
         inLanguage: "en",
       },
@@ -120,12 +120,13 @@ export default async function Home({ searchParams }: { searchParams: Search }) {
           ⚡ For Volvo BEV &amp; PHEV owners
         </p>
         <h1 className="mt-3 text-4xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50 sm:text-5xl">
-          Your Volvo&apos;s charging, in one quiet dashboard.
+          The charging history the Volvo app doesn&apos;t give you.
         </h1>
         <p className="mx-auto mt-4 max-w-xl text-base text-zinc-600 dark:text-zinc-400">
-          Live state of charge, every charging session you&apos;ve had, where it happened —
-          stitched together from Volvo&apos;s own Connected Vehicle, Energy, and Location
-          APIs. Free, open source, mobile-first.
+          Every plug-in, every kWh, every location — home, work, and public stalls alike,
+          not just sessions at Volvo&apos;s Public Charging partners. Stitched together
+          from Volvo&apos;s own Connected Vehicle, Energy, and Location APIs. Free, open
+          source, mobile-first.
         </p>
 
         {deleted ? (
