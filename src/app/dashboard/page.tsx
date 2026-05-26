@@ -147,20 +147,13 @@ export default async function DashboardPage() {
               <span className="ml-1 font-normal text-zinc-500">· {active.modelYear}</span>
             ) : null}
           </h1>
-          {(() => {
-            const bits = [
-              active.externalColour,
-              active.upholstery,
-              active.fuelType,
-              active.gearbox,
-              active.steering ? `${active.steering}-hand drive` : null,
-              active.batteryCapacityKwh ? `${active.batteryCapacityKwh} kWh battery` : null,
-            ].filter(Boolean) as string[];
-            return bits.length ? (
-              <p className="mt-0.5 text-xs text-zinc-500">{bits.join(" · ")}</p>
-            ) : null;
-          })()}
-          <p className="mt-0.5 break-all font-mono text-xs text-zinc-500">{active.vin}</p>
+          <p className="mt-0.5 break-all text-xs text-zinc-500">
+            {active.batteryCapacityKwh != null ? (
+              <span className="tabular-nums">{active.batteryCapacityKwh} kWh</span>
+            ) : null}
+            {active.batteryCapacityKwh != null ? <span> · </span> : null}
+            <span className="font-mono">{active.vin}</span>
+          </p>
         </div>
         {active.exteriorImageUrl ? (
           <Image

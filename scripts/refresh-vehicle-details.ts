@@ -8,7 +8,6 @@
  * the new fields without needing the user to sign in again.
  */
 import "dotenv/config";
-import { eq } from "drizzle-orm";
 import { db, pool } from "@/db/client";
 import { users } from "@/db/schema";
 import { loadUserContext } from "@/lib/userVehicle";
