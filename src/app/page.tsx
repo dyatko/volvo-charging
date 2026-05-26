@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { getSession } from "@/lib/session";
 import { OAuthForm } from "@/components/oauth-form";
 import { TestTokenForm } from "@/components/test-token-form";
@@ -26,7 +27,7 @@ export default async function Home({ searchParams }: { searchParams: Search }) {
       ) : null}
 
       <div className="mt-5 flex gap-2 text-xs">
-        <a
+        <Link
           href="/"
           className={
             "rounded-full px-3 py-1 " +
@@ -36,8 +37,8 @@ export default async function Home({ searchParams }: { searchParams: Search }) {
           }
         >
           Sign in with Volvo ID
-        </a>
-        <a
+        </Link>
+        <Link
           href="/?mode=test"
           className={
             "rounded-full px-3 py-1 " +
@@ -47,7 +48,7 @@ export default async function Home({ searchParams }: { searchParams: Search }) {
           }
         >
           Use test tokens
-        </a>
+        </Link>
       </div>
 
       {!showTestToken ? <OAuthIntro /> : <TestTokenIntro />}
@@ -108,10 +109,10 @@ function TestTokenIntro() {
         When to use this — unpublished app, just kicking the tires
       </summary>
       <p className="mt-3 text-zinc-600 dark:text-zinc-400">
-        Volvo's portal issues a separate test access token <em>per API</em>. Generate one
-        from each API's <strong>Test access tokens</strong> page (linked next to each
+        Volvo&apos;s portal issues a separate test access token <em>per API</em>. Generate one
+        from each API&apos;s <strong>Test access tokens</strong> page (linked next to each
         field), then paste below. The Connected Vehicle token discovers your VINs — you
-        don't need to type any.
+        don&apos;t need to type any.
       </p>
       <p className="mt-2 text-xs text-amber-700 dark:text-amber-400">
         Test tokens expire after 30 minutes and have no refresh. Polling stops working until

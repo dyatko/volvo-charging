@@ -1,18 +1,26 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef } from "react";
 
 const KEY = "volvo-charging.oauth-form";
 
 type Stored = { clientId: string; clientSecret: string; vccApiKey: string };
 
+const empty: Stored = { clientId: "", clientSecret: "", vccApiKey: "" };
+
 export function OAuthForm() {
-  const [v, setV] = useState<Stored>({ clientId: "", clientSecret: "", vccApiKey: "" });
+  const clientIdRef = useRef<HTMLInputElement>(null);
+  const clientSecretRef = useRef<HTMLInputElement>(null);
+  const vccApiKeyRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     try {
       const raw = localStorage.getItem(KEY);
-      if (raw) setV({ ...{ clientId: "", clientSecret: "", vccApiKey: "" }, ...JSON.parse(raw) });
+      if (!raw) return;
+      const v: Stored = { ...empty, ...JSON.parse(raw) };
+      if (clientIdRef.current) clientIdRef.current.value = v.clientId;
+      if (clientSecretRef.current) clientSecretRef.current.value = v.clientSecret;
+      if (vccApiKeyRef.current) vccApiKeyRef.current.value = v.vccApiKey;
     } catch {
       /* ignore */
     }
@@ -42,34 +50,31 @@ export function OAuthForm() {
       <label className="block">
         <span className="text-sm font-medium">Client ID</span>
         <input
+          ref={clientIdRef}
           required
           name="clientId"
           autoComplete="off"
-          defaultValue={v.clientId}
-          key={`cid-${v.clientId}`}
           className="mt-1 block w-full rounded-md border border-zinc-300 bg-white px-3 py-2 font-mono text-xs dark:border-zinc-700 dark:bg-zinc-900"
         />
       </label>
       <label className="block">
         <span className="text-sm font-medium">Client secret</span>
         <input
+          ref={clientSecretRef}
           required
           type="password"
           name="clientSecret"
           autoComplete="off"
-          defaultValue={v.clientSecret}
-          key={`cs-${v.clientSecret}`}
           className="mt-1 block w-full rounded-md border border-zinc-300 bg-white px-3 py-2 font-mono text-xs dark:border-zinc-700 dark:bg-zinc-900"
         />
       </label>
       <label className="block">
         <span className="text-sm font-medium">VCC API key (Primary)</span>
         <input
+          ref={vccApiKeyRef}
           required
           name="vccApiKey"
           autoComplete="off"
-          defaultValue={v.vccApiKey}
-          key={`vcc-${v.vccApiKey}`}
           className="mt-1 block w-full rounded-md border border-zinc-300 bg-white px-3 py-2 font-mono text-xs dark:border-zinc-700 dark:bg-zinc-900"
         />
       </label>
@@ -80,7 +85,7 @@ export function OAuthForm() {
         Sign in with Volvo ID
       </button>
       <p className="text-center text-xs text-zinc-500">
-        Fields are persisted in your browser's localStorage so you don't re-paste each visit.
+        Fields are persisted in your browser&apos;s localStorage so you don&apos;t re-paste each visit.
       </p>
     </form>
   );

@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import Image from "next/image";
+import Link from "next/link";
 import { and, desc, eq } from "drizzle-orm";
 import { db } from "@/db/client";
 import { chargingSessions, stateSnapshots } from "@/db/schema";
@@ -132,7 +133,7 @@ export default async function DashboardPage() {
       {!energyCreds ? (
         <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-700 dark:bg-amber-900/20 dark:text-amber-200">
           Your Energy API token has expired or is missing. Showing the last cached snapshot.
-          <a href="/" className="ml-1 underline">Sign in again</a>.
+          <Link href="/" className="ml-1 underline">Sign in again</Link>.
         </div>
       ) : null}
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef } from "react";
 
 const KEY = "volvo-charging.test-token-form";
 
@@ -19,12 +19,20 @@ const empty: Stored = {
 };
 
 export function TestTokenForm() {
-  const [v, setV] = useState<Stored>(empty);
+  const vccApiKeyRef = useRef<HTMLInputElement>(null);
+  const energyTokenRef = useRef<HTMLTextAreaElement>(null);
+  const conveTokenRef = useRef<HTMLTextAreaElement>(null);
+  const locationTokenRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     try {
       const raw = localStorage.getItem(KEY);
-      if (raw) setV({ ...empty, ...JSON.parse(raw) });
+      if (!raw) return;
+      const v: Stored = { ...empty, ...JSON.parse(raw) };
+      if (vccApiKeyRef.current) vccApiKeyRef.current.value = v.vccApiKey;
+      if (energyTokenRef.current) energyTokenRef.current.value = v.energyToken;
+      if (conveTokenRef.current) conveTokenRef.current.value = v.conveToken;
+      if (locationTokenRef.current) locationTokenRef.current.value = v.locationToken;
     } catch {
       /* ignore */
     }
@@ -55,16 +63,16 @@ export function TestTokenForm() {
       <label className="block">
         <span className="text-sm font-medium">VCC API key (Primary)</span>
         <input
+          ref={vccApiKeyRef}
           required
           name="vccApiKey"
           autoComplete="off"
-          defaultValue={v.vccApiKey}
-          key={`vcc-${v.vccApiKey}`}
           className="mt-1 block w-full rounded-md border border-zinc-300 bg-white px-3 py-2 font-mono text-xs dark:border-zinc-700 dark:bg-zinc-900"
         />
       </label>
 
       <TokenField
+        innerRef={conveTokenRef}
         name="conveToken"
         label="Connected Vehicle API token"
         required
@@ -74,9 +82,9 @@ export function TestTokenForm() {
         }}
         scopes="conve:vehicle_relation"
         hint="We use this to list your VINs and fetch model / battery / photo."
-        initial={v.conveToken}
       />
       <TokenField
+        innerRef={energyTokenRef}
         name="energyToken"
         label="Energy API token"
         required
@@ -85,9 +93,9 @@ export function TestTokenForm() {
           label: "Energy API docs → Test access tokens",
         }}
         scopes="energy:state:read, energy:capability:read"
-        initial={v.energyToken}
       />
       <TokenField
+        innerRef={locationTokenRef}
         name="locationToken"
         label="Location API token"
         link={{
@@ -96,7 +104,6 @@ export function TestTokenForm() {
         }}
         scopes="location:read"
         hint="Optional. Captures lat/lng on charging-session start and end."
-        initial={v.locationToken}
       />
 
       <button
@@ -106,28 +113,28 @@ export function TestTokenForm() {
         Connect with test tokens
       </button>
       <p className="text-center text-xs text-zinc-500">
-        Fields are persisted in your browser's localStorage so you only paste fresh tokens.
+        Fields are persisted in your browser&apos;s localStorage so you only paste fresh tokens.
       </p>
     </form>
   );
 }
 
 function TokenField({
+  innerRef,
   name,
   label,
   link,
   scopes,
   required = false,
   hint,
-  initial,
 }: {
+  innerRef: React.Ref<HTMLTextAreaElement>;
   name: string;
   label: string;
   link: { href: string; label: string };
   scopes: string;
   required?: boolean;
   hint?: string;
-  initial: string;
 }) {
   return (
     <label className="block">
@@ -136,12 +143,11 @@ function TokenField({
         {required ? null : <span className="text-xs font-normal text-zinc-500">optional</span>}
       </span>
       <textarea
+        ref={innerRef}
         required={required}
         name={name}
         rows={3}
         placeholder="eyJhbGciOi..."
-        defaultValue={initial}
-        key={`${name}-${initial.slice(0, 16)}`}
         className="mt-1 block w-full rounded-md border border-zinc-300 bg-white px-3 py-2 font-mono text-xs dark:border-zinc-700 dark:bg-zinc-900"
       />
       <span className="mt-1 block text-xs text-zinc-500">

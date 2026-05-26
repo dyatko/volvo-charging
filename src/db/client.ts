@@ -9,7 +9,6 @@ if (!url) {
 
 declare global {
   // Reuse the pool across hot reloads in dev.
-  // eslint-disable-next-line no-var
   var __volvoPool: Pool | undefined;
 }
 

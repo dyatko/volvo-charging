@@ -47,7 +47,7 @@ export default async function SessionsPage() {
       {rows.length === 0 ? (
         <div className="mt-6 rounded-xl border border-dashed border-zinc-300 p-6 text-center text-sm text-zinc-500 dark:border-zinc-700">
           No sessions yet. Plug the car in (or hit{" "}
-          <span className="font-medium">Refresh</span> from the dashboard while it's plugged in)
+          <span className="font-medium">Refresh</span> from the dashboard while it&apos;s plugged in)
           and one will appear here.
         </div>
       ) : (

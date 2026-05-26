@@ -1,0 +1,125 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Workload Identity Federation needs id-token write.
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+  GCP_PROJECT_NUMBER: ${{ vars.GCP_PROJECT_NUMBER }}
+  GCP_REGION: europe-north1
+  GCP_AR_REPO: volvo-charging
+  GCP_SERVICE: volvo-charging
+  GCP_WIF_PROVIDER: ${{ vars.GCP_WIF_PROVIDER }}   # full resource name
+  GCP_DEPLOYER_SA: ${{ vars.GCP_DEPLOYER_SA }}     # deployer@PROJECT.iam.gserviceaccount.com
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: deploy-main
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ env.GCP_WIF_PROVIDER }}
+          service_account: ${{ env.GCP_DEPLOYER_SA }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev --quiet
+
+      - name: Build and push image
+        env:
+          IMAGE: ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.GCP_AR_REPO }}/app:${{ github.sha }}
+        run: |
+          docker build -t "$IMAGE" .
+          docker push "$IMAGE"
+          # Also tag the latest commit on main so prod-revert is one tag flip.
+          docker tag "$IMAGE" "${IMAGE%:*}:latest"
+          docker push "${IMAGE%:*}:latest"
+
+      - name: Run database migrations
+        env:
+          # Pulled directly from Secret Manager; never lands in repo or GHA logs.
+          # deployer SA needs roles/secretmanager.secretAccessor on DATABASE_URL.
+          DATABASE_URL: ${{ steps.fetch-db-url.outputs.value }}
+        id: fetch-db-url
+        run: |
+          DATABASE_URL=$(gcloud secrets versions access latest --secret=DATABASE_URL --project=${{ env.GCP_PROJECT_ID }})
+          # Mask before exporting so step logs can't leak it.
+          echo "::add-mask::$DATABASE_URL"
+          DATABASE_URL="$DATABASE_URL" pnpm db:migrate
+
+      - name: Deploy to Cloud Run (no traffic)
+        id: deploy
+        env:
+          IMAGE: ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.GCP_AR_REPO }}/app:${{ github.sha }}
+        run: |
+          REVISION="rev-${GITHUB_SHA::8}"
+          gcloud run deploy ${{ env.GCP_SERVICE }} \
+            --image="$IMAGE" \
+            --region=${{ env.GCP_REGION }} \
+            --platform=managed \
+            --allow-unauthenticated \
+            --port=8080 \
+            --memory=512Mi \
+            --cpu=1 \
+            --concurrency=80 \
+            --timeout=300 \
+            --min-instances=0 \
+            --max-instances=2 \
+            --service-account="app@${{ env.GCP_PROJECT_ID }}.iam.gserviceaccount.com" \
+            --update-secrets="DATABASE_URL=DATABASE_URL:latest,SESSION_SECRET=SESSION_SECRET:latest,DATA_ENCRYPTION_KEK=DATA_ENCRYPTION_KEK:latest" \
+            --update-env-vars="INTERNAL_CALLER_EMAIL=scheduler@${{ env.GCP_PROJECT_ID }}.iam.gserviceaccount.com" \
+            --no-traffic \
+            --tag="$REVISION" \
+            --quiet
+          REV_URL=$(gcloud run services describe ${{ env.GCP_SERVICE }} \
+            --region=${{ env.GCP_REGION }} \
+            --format='value(status.traffic[?tag='"$REVISION"'].url)')
+          echo "revision_url=$REV_URL" >> "$GITHUB_OUTPUT"
+
+      - name: Smoke test new revision
+        run: |
+          set -e
+          URL="${{ steps.deploy.outputs.revision_url }}"
+          if [ -z "$URL" ]; then
+            echo "::error::Could not resolve revision URL"
+            exit 1
+          fi
+          for i in 1 2 3 4 5; do
+            if curl -fsS --max-time 10 "$URL/healthz"; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::Smoke test failed against $URL"
+          exit 1
+
+      - name: Promote revision to 100% traffic
+        run: |
+          gcloud run services update-traffic ${{ env.GCP_SERVICE }} \
+            --region=${{ env.GCP_REGION }} \
+            --to-latest \
+            --quiet
