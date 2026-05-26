@@ -7,6 +7,20 @@ import type { UserContext } from "@/lib/userVehicle";
 
 type SnapshotRow = typeof stateSnapshots.$inferInsert;
 
+/**
+ * Normalise Volvo's charging-power readout to kW. The Energy API returns
+ * integers tagged with a `unit` field — we've observed "watt" (e.g. 3435 W
+ * for ~3.4 kW AC charging). Be defensive: also accept "kilowatt" in case
+ * Volvo ever switches the unit on a given car.
+ */
+function chargingPowerToKw(value: number, unit: string | undefined): number {
+  const u = (unit ?? "").toLowerCase();
+  if (u === "w" || u === "watt" || u === "watts") return value / 1000;
+  if (u === "kw" || u === "kilowatt" || u === "kilowatts") return value;
+  // Heuristic fallback: anything ≥ 1000 is almost certainly watts.
+  return value >= 1000 ? value / 1000 : value;
+}
+
 const CONNECTED_STATES = new Set(["CONNECTED", "CONNECTED_AC", "CONNECTED_DC"]);
 
 function isConnected(s: string | null | undefined): boolean {
@@ -77,7 +91,9 @@ export async function pollOne(opts: {
     chargingStatus: charging.ok ? String(charging.value) : null,
     chargingType: chargingType.ok ? String(chargingType.value) : null,
     chargerPowerStatus: chargerPower.ok ? String(chargerPower.value) : null,
-    chargingPowerKw: chargingPower.ok ? Number(chargingPower.value) : null,
+    chargingPowerKw: chargingPower.ok
+      ? chargingPowerToKw(Number(chargingPower.value), chargingPower.unit)
+      : null,
     targetSoc: targetSoc.ok ? Math.round(Number(targetSoc.value)) : null,
     currentLimitA: currentLimit.ok ? Math.round(Number(currentLimit.value)) : null,
   };
