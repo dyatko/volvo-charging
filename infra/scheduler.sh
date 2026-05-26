@@ -8,7 +8,7 @@
 
 set -euo pipefail
 
-PROJECT_ID="volvo-charging-app"   # must match infra/bootstrap.sh
+PROJECT_ID="volvocharging"        # must match infra/bootstrap.sh
 REGION="europe-north1"
 SERVICE="volvo-charging"
 

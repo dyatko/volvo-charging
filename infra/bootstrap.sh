@@ -13,7 +13,7 @@
 set -euo pipefail
 
 # ─── EDIT THESE ────────────────────────────────────────────────────────
-PROJECT_ID="volvo-charging-app"      # globally unique
+PROJECT_ID="volvocharging"           # globally unique
 GITHUB_REPO="dyatko/volvo-charging"  # owner/repo
 REGION="europe-north1"
 AR_REPO="volvo-charging"
