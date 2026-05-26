@@ -3,7 +3,7 @@ import { desc, eq } from "drizzle-orm";
 import { db } from "@/db/client";
 import { chargingSessions } from "@/db/schema";
 import { getSession } from "@/lib/session";
-import { loadUserVehicleAndCreds } from "@/lib/userVehicle";
+import { loadUserContext } from "@/lib/userVehicle";
 
 export const dynamic = "force-dynamic";
 
@@ -24,19 +24,21 @@ function fmtCoord(lat: number | null, lng: number | null): string | null {
 export default async function SessionsPage() {
   const session = await getSession();
   if (!session.userId) redirect("/");
-  const loaded = await loadUserVehicleAndCreds(session.userId);
-  if (!loaded) redirect("/");
+  const ctx = await loadUserContext(session.userId);
+  if (!ctx || !ctx.activeVehicle) redirect("/");
 
+  const active = ctx.activeVehicle;
   const rows = await db
     .select()
     .from(chargingSessions)
-    .where(eq(chargingSessions.vin, loaded.user.vin))
+    .where(eq(chargingSessions.vin, active.vin))
     .orderBy(desc(chargingSessions.startedAt))
     .limit(100);
 
   return (
     <main className="mx-auto w-full max-w-md flex-1 px-4 py-6">
       <h1 className="text-xl font-semibold tracking-tight">Charging sessions</h1>
+      <p className="mt-1 break-all font-mono text-xs text-zinc-500">{active.vin}</p>
       <p className="mt-1 text-xs text-zinc-500">
         Derived from <code>state_snapshots</code>. New sessions appear automatically when the
         car transitions between connected/disconnected.

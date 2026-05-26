@@ -16,6 +16,10 @@ import {
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
   email: text("email").unique(),
+  // VIN the user is currently viewing. Null until the first vehicle is linked.
+  // Not a FK because it would cycle with vehicles.user_id; we enforce
+  // consistency at write time and tolerate orphan vins on user delete.
+  activeVin: text("active_vin"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 

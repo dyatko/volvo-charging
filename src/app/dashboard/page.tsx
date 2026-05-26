@@ -4,8 +4,8 @@ import { and, desc, eq } from "drizzle-orm";
 import { db } from "@/db/client";
 import { chargingSessions, stateSnapshots } from "@/db/schema";
 import { getSession } from "@/lib/session";
-import { loadUserVehicleAndCreds } from "@/lib/userVehicle";
-import { pollOne } from "@/lib/polling";
+import { loadUserContext } from "@/lib/userVehicle";
+import { pollAllVehicles } from "@/lib/polling";
 import { RefreshButton } from "@/components/refresh-button";
 
 export const dynamic = "force-dynamic";
@@ -87,9 +87,7 @@ function SocRing({ soc, target }: { soc: number | null; target: number | null })
           {soc != null ? soc : "—"}
           <span className="text-base font-normal text-zinc-500">%</span>
         </div>
-        {target ? (
-          <div className="text-xs text-zinc-500">target {target}%</div>
-        ) : null}
+        {target ? <div className="text-xs text-zinc-500">target {target}%</div> : null}
       </div>
     </div>
   );
@@ -98,25 +96,23 @@ function SocRing({ soc, target }: { soc: number | null; target: number | null })
 export default async function DashboardPage() {
   const session = await getSession();
   if (!session.userId) redirect("/");
-  const loaded = await loadUserVehicleAndCreds(session.userId);
-  if (!loaded) redirect("/");
+  const ctx = await loadUserContext(session.userId);
+  if (!ctx || !ctx.activeVehicle) redirect("/");
 
-  // Best-effort: refresh state on page load so the first dashboard visit shows live data.
-  const energyCreds = loaded.credsFor("energy");
+  const energyCreds = ctx.credsFor("energy");
+
+  // Poll ALL of the user's vehicles on every dashboard load.
   if (energyCreds) {
-    await pollOne({
-      vin: loaded.user.vin,
-      energyCreds,
-      locationCreds: loaded.credsFor("location"),
-      batteryCapacityKwh: loaded.user.batteryCapacityKwh,
-    }).catch(() => undefined);
+    await pollAllVehicles(ctx).catch(() => undefined);
   }
+
+  const active = ctx.activeVehicle;
 
   const latest = (
     await db
       .select()
       .from(stateSnapshots)
-      .where(eq(stateSnapshots.vin, loaded.user.vin))
+      .where(eq(stateSnapshots.vin, active.vin))
       .orderBy(desc(stateSnapshots.observedAt))
       .limit(1)
   )[0];
@@ -125,39 +121,37 @@ export default async function DashboardPage() {
     await db
       .select()
       .from(chargingSessions)
-      .where(and(eq(chargingSessions.vin, loaded.user.vin), eq(chargingSessions.isOpen, true)))
+      .where(and(eq(chargingSessions.vin, active.vin), eq(chargingSessions.isOpen, true)))
       .limit(1)
   )[0];
 
-  const isConnected = latest?.connectionStatus
-    ? CONNECTED.has(latest.connectionStatus)
-    : false;
-  const noEnergyCreds = !energyCreds;
+  const isConnected = latest?.connectionStatus ? CONNECTED.has(latest.connectionStatus) : false;
 
   return (
     <main className="mx-auto w-full max-w-md flex-1 px-4 py-6">
-      {noEnergyCreds ? (
+      {!energyCreds ? (
         <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-700 dark:bg-amber-900/20 dark:text-amber-200">
           Your Energy API token has expired or is missing. Showing the last cached snapshot.
           <a href="/" className="ml-1 underline">Sign in again</a>.
         </div>
       ) : null}
+
       <header className="mb-5 flex items-start justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold tracking-tight">
-            {loaded.user.model ?? "Your Volvo"}
-            {loaded.user.modelYear ? (
-              <span className="ml-1 text-zinc-500">·{loaded.user.modelYear}</span>
+            {active.model ?? "Your Volvo"}
+            {active.modelYear ? (
+              <span className="ml-1 text-zinc-500">·{active.modelYear}</span>
             ) : null}
           </h1>
-          <p className="text-xs text-zinc-500">
-            VIN ••• {loaded.user.vin.slice(-4)}
-            {loaded.user.externalColour ? ` · ${loaded.user.externalColour}` : null}
+          <p className="break-all font-mono text-xs text-zinc-500">
+            {active.vin}
+            {active.externalColour ? <span className="ml-2">· {active.externalColour}</span> : null}
           </p>
         </div>
-        {loaded.user.exteriorImageUrl ? (
+        {active.exteriorImageUrl ? (
           <Image
-            src={loaded.user.exteriorImageUrl}
+            src={active.exteriorImageUrl}
             alt="Vehicle"
             width={80}
             height={48}
@@ -177,9 +171,7 @@ export default async function DashboardPage() {
           ) : null}
         </div>
         {latest?.rangeKm != null ? (
-          <p className="text-sm text-zinc-600 dark:text-zinc-400">
-            ~{latest.rangeKm} km range
-          </p>
+          <p className="text-sm text-zinc-600 dark:text-zinc-400">~{latest.rangeKm} km range</p>
         ) : null}
         {latest?.chargingPowerKw != null ? (
           <p className="text-sm text-zinc-600 dark:text-zinc-400">
@@ -201,16 +193,23 @@ export default async function DashboardPage() {
               Started {fmtRelative(openSession.startedAt)} · {openSession.startSoc}% → {latest?.soc ?? "?"}%
             </p>
           ) : (
-            <p className="text-xs text-zinc-500">Last poll {fmtRelative(latest?.observedAt ?? null) ?? "never"}</p>
+            <p className="text-xs text-zinc-500">
+              Last poll {fmtRelative(latest?.observedAt ?? null) ?? "never"}
+            </p>
           )}
         </div>
         <RefreshButton />
       </section>
 
-      <p className="mt-6 text-center text-xs text-zinc-500">
-        Polls Energy API on every Refresh. Sessions are derived from observed plug/unplug
-        transitions in <code>state_snapshots</code>.
-      </p>
+      {ctx.vehicles.length > 1 ? (
+        <p className="mt-6 text-center text-xs text-zinc-500">
+          Polling {ctx.vehicles.length} vehicles · use the switcher in the header to view another.
+        </p>
+      ) : (
+        <p className="mt-6 text-center text-xs text-zinc-500">
+          Sessions are derived from observed plug/unplug transitions.
+        </p>
+      )}
     </main>
   );
 }

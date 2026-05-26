@@ -3,6 +3,7 @@ import { db } from "@/db/client";
 import { chargingSessions, stateSnapshots, vehicles } from "@/db/schema";
 import { makeEnergyClient, makeLocationClient, pointToLatLng, type VolvoCreds } from "@/lib/volvo/client";
 import { readField } from "@/lib/volvo/state";
+import type { UserContext } from "@/lib/userVehicle";
 
 type SnapshotRow = typeof stateSnapshots.$inferInsert;
 
@@ -217,3 +218,32 @@ export async function latestSnapshot(vin: string) {
 
 // Marker exported for clarity in places that filter "currently charging" sessions.
 export const openSessionFilter = isNull(chargingSessions.endedAt);
+
+/**
+ * Poll every vehicle linked to the user, in parallel. Returns per-vehicle
+ * outcomes. Skips polling if no usable Energy creds — caller decides whether
+ * to surface that to the UI.
+ */
+export async function pollAllVehicles(ctx: UserContext): Promise<
+  Array<{ vin: string; outcome: PollOutcome }>
+> {
+  const energyCreds = ctx.credsFor("energy");
+  if (!energyCreds) {
+    return ctx.vehicles.map((v) => ({
+      vin: v.vin,
+      outcome: { ok: false, reason: "no usable Energy API token" },
+    }));
+  }
+  const locationCreds = ctx.credsFor("location");
+  return Promise.all(
+    ctx.vehicles.map(async (v) => ({
+      vin: v.vin,
+      outcome: await pollOne({
+        vin: v.vin,
+        energyCreds,
+        locationCreds,
+        batteryCapacityKwh: v.batteryCapacityKwh,
+      }).catch((e) => ({ ok: false, reason: e instanceof Error ? e.message : String(e) } as PollOutcome)),
+    })),
+  );
+}

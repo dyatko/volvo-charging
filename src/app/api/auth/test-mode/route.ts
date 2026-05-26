@@ -2,10 +2,10 @@ import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db/client";
-import { users, volvoCredentials, volvoTokens, vehicles } from "@/db/schema";
+import { users, volvoCredentials, volvoTokens } from "@/db/schema";
 import { encrypt } from "@/lib/crypto";
 import { getSession } from "@/lib/session";
-import { makeConveClient } from "@/lib/volvo/client";
+import { upsertSingleVehicle } from "@/lib/vehicleBootstrap";
 
 // Each token is the access_token from a separate test-access-token page
 // in Volvo's developer portal (one per API).
@@ -71,27 +71,6 @@ export async function POST(req: Request) {
   const conveExpiresAt = conveToken ? decodeJwtExp(conveToken) : null;
   const locationExpiresAt = locationToken ? decodeJwtExp(locationToken) : null;
 
-  // If we have a Connected Vehicle token, fetch model/photo/battery details up
-  // front. Otherwise the vehicle row is populated with VIN only — the UI will
-  // show a more spartan dashboard until the user supplies a Conve token later.
-  let details:
-    | {
-        descriptions?: { model?: string };
-        modelYear?: number;
-        fuelType?: string;
-        externalColour?: string;
-        batteryCapacityKWH?: number;
-        images?: { exteriorImageUrl?: string };
-      }
-    | undefined;
-  let conveError: string | null = null;
-  if (conveToken) {
-    const conve = makeConveClient({ accessToken: conveToken, vccApiKey });
-    const r = await conve.GET("/vehicles/{vin}", { params: { path: { vin } } });
-    if (r.error) conveError = `details fetch failed: HTTP ${r.response.status}`;
-    else details = r.data ?? undefined;
-  }
-
   const userRow = await db.transaction(async (tx) => {
     let u = externalIdSentinel
       ? (await tx.select().from(users).where(eq(users.email, externalIdSentinel)).limit(1))[0]
@@ -117,7 +96,6 @@ export async function POST(req: Request) {
       .insert(volvoTokens)
       .values({
         userId: u.id,
-        // OAuth columns null; we only use per-API columns in test-mode.
         accessTokenEnc: null,
         refreshTokenEnc: null,
         expiresAt: null,
@@ -125,9 +103,9 @@ export async function POST(req: Request) {
         energyTokenEnc: encrypt(energyToken),
         energyExpiresAt,
         conveTokenEnc: conveToken ? encrypt(conveToken) : null,
-        conveExpiresAt: conveExpiresAt,
+        conveExpiresAt,
         locationTokenEnc: locationToken ? encrypt(locationToken) : null,
-        locationExpiresAt: locationExpiresAt,
+        locationExpiresAt,
       })
       .onConflictDoUpdate({
         target: volvoTokens.userId,
@@ -139,39 +117,20 @@ export async function POST(req: Request) {
           energyTokenEnc: encrypt(energyToken),
           energyExpiresAt,
           conveTokenEnc: conveToken ? encrypt(conveToken) : null,
-          conveExpiresAt: conveExpiresAt,
+          conveExpiresAt,
           locationTokenEnc: locationToken ? encrypt(locationToken) : null,
-          locationExpiresAt: locationExpiresAt,
+          locationExpiresAt,
           updatedAt: new Date(),
         },
       });
 
-    await tx
-      .insert(vehicles)
-      .values({
-        vin,
-        userId: u.id,
-        model: details?.descriptions?.model ?? null,
-        modelYear: details?.modelYear ?? null,
-        fuelType: details?.fuelType ?? null,
-        externalColour: details?.externalColour ?? null,
-        batteryCapacityKwh: details?.batteryCapacityKWH ?? null,
-        exteriorImageUrl: details?.images?.exteriorImageUrl ?? null,
-      })
-      .onConflictDoUpdate({
-        target: vehicles.vin,
-        set: {
-          userId: u.id,
-          model: details?.descriptions?.model ?? null,
-          modelYear: details?.modelYear ?? null,
-          fuelType: details?.fuelType ?? null,
-          externalColour: details?.externalColour ?? null,
-          batteryCapacityKwh: details?.batteryCapacityKWH ?? null,
-          exteriorImageUrl: details?.images?.exteriorImageUrl ?? null,
-        },
-      });
-
     return u;
+  });
+
+  const { conveError } = await upsertSingleVehicle({
+    userId: userRow.id,
+    vin,
+    conveCreds: conveToken ? { accessToken: conveToken, vccApiKey } : null,
   });
 
   const session = await getSession();

@@ -1,16 +1,15 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "@/db/client";
 import { users, volvoCredentials, volvoTokens, vehicles } from "@/db/schema";
 import { decrypt, encrypt } from "@/lib/crypto";
 import { refreshAccessToken } from "@/lib/oauth";
 import type { VolvoCreds } from "@/lib/volvo/client";
 
-export type UserVehicle = {
-  userId: string;
-  email: string | null;
+export type VehicleRow = {
   vin: string;
   model: string | null;
   modelYear: number | null;
+  fuelType: string | null;
   externalColour: string | null;
   batteryCapacityKwh: number | null;
   exteriorImageUrl: string | null;
@@ -18,75 +17,70 @@ export type UserVehicle = {
 
 export type ApiKind = "energy" | "conve" | "location";
 
-export type Loaded = {
-  user: UserVehicle;
+export type UserCreds = {
   vccApiKey: string;
-  /**
-   * Resolve usable Volvo credentials for a given API.
-   * Prefers the OAuth shared access_token (if not expired); falls back to a
-   * test-mode per-API token. Returns null if neither is usable.
-   */
   credsFor: (api: ApiKind) => VolvoCreds | null;
-  /** True if the most recent OAuth attempt was refreshed within this load. */
-  refreshed: boolean;
+};
+
+export type UserContext = UserCreds & {
+  userId: string;
+  email: string | null;
+  vehicles: VehicleRow[];
+  activeVehicle: VehicleRow | null;
 };
 
 const REFRESH_WINDOW_MS = 60_000;
 
-export async function loadUserVehicleAndCreds(userId: string): Promise<Loaded | null> {
-  const row = (
+/**
+ * Load everything we need to render a signed-in page:
+ *   - user identity
+ *   - per-API Volvo credentials (auto-refreshed if the OAuth token is near
+ *     expiry)
+ *   - all vehicles linked to this user (the polling loop iterates them)
+ *   - the vehicle currently selected for display (users.active_vin)
+ *
+ * Returns null if the user no longer exists or token refresh failed.
+ */
+export async function loadUserContext(userId: string): Promise<UserContext | null> {
+  const userRow = (
+    await db.select().from(users).where(eq(users.id, userId)).limit(1)
+  )[0];
+  if (!userRow) return null;
+
+  // Credentials + tokens (one row per user).
+  const credsRow = (
     await db
-      .select({
-        userId: users.id,
-        email: users.email,
-        vin: vehicles.vin,
-        model: vehicles.model,
-        modelYear: vehicles.modelYear,
-        externalColour: vehicles.externalColour,
-        batteryCapacityKwh: vehicles.batteryCapacityKwh,
-        exteriorImageUrl: vehicles.exteriorImageUrl,
-        clientId: volvoCredentials.clientId,
-        clientSecretEnc: volvoCredentials.clientSecretEnc,
-        vccApiKeyEnc: volvoCredentials.vccApiKeyEnc,
-        accessTokenEnc: volvoTokens.accessTokenEnc,
-        refreshTokenEnc: volvoTokens.refreshTokenEnc,
-        expiresAt: volvoTokens.expiresAt,
-        scope: volvoTokens.scope,
-        energyTokenEnc: volvoTokens.energyTokenEnc,
-        energyExpiresAt: volvoTokens.energyExpiresAt,
-        conveTokenEnc: volvoTokens.conveTokenEnc,
-        conveExpiresAt: volvoTokens.conveExpiresAt,
-        locationTokenEnc: volvoTokens.locationTokenEnc,
-        locationExpiresAt: volvoTokens.locationExpiresAt,
-      })
-      .from(users)
-      .innerJoin(vehicles, eq(vehicles.userId, users.id))
-      .innerJoin(volvoCredentials, eq(volvoCredentials.userId, users.id))
-      .innerJoin(volvoTokens, eq(volvoTokens.userId, users.id))
-      .where(eq(users.id, userId))
+      .select()
+      .from(volvoCredentials)
+      .where(eq(volvoCredentials.userId, userId))
       .limit(1)
   )[0];
+  const tokensRow = (
+    await db
+      .select()
+      .from(volvoTokens)
+      .where(eq(volvoTokens.userId, userId))
+      .limit(1)
+  )[0];
+  if (!credsRow || !tokensRow) return null;
 
-  if (!row) return null;
+  const vccApiKey = decrypt(credsRow.vccApiKeyEnc);
 
-  const vccApiKey = decrypt(row.vccApiKeyEnc);
+  // Refresh OAuth shared token if present and within the refresh window.
+  let oauthAccessToken: string | null = tokensRow.accessTokenEnc
+    ? decrypt(tokensRow.accessTokenEnc)
+    : null;
+  let oauthExpiresAt: Date | null = tokensRow.expiresAt;
 
-  // Refresh OAuth shared token if present and near expiry. The OAuth path
-  // covers all three APIs, so a successful refresh fixes Energy, Conve, and
-  // Location at once.
-  let oauthAccessToken: string | null = row.accessTokenEnc ? decrypt(row.accessTokenEnc) : null;
-  let oauthExpiresAt: Date | null = row.expiresAt;
-  let refreshed = false;
-
-  const isTestModePrimary = row.clientId === "test-token";
-  if (!isTestModePrimary && row.refreshTokenEnc && oauthExpiresAt) {
+  const isTestModePrimary = credsRow.clientId === "test-token";
+  if (!isTestModePrimary && tokensRow.refreshTokenEnc && oauthExpiresAt) {
     const expiresInMs = oauthExpiresAt.getTime() - Date.now();
     if (expiresInMs < REFRESH_WINDOW_MS) {
       try {
-        const clientSecret = decrypt(row.clientSecretEnc);
-        const refreshToken = decrypt(row.refreshTokenEnc);
+        const clientSecret = decrypt(credsRow.clientSecretEnc);
+        const refreshToken = decrypt(tokensRow.refreshTokenEnc);
         const tokens = await refreshAccessToken({
-          clientId: row.clientId,
+          clientId: credsRow.clientId,
           clientSecret,
           refreshToken,
         });
@@ -99,11 +93,10 @@ export async function loadUserVehicleAndCreds(userId: string): Promise<Loaded | 
               accessTokenEnc: encrypt(oauthAccessToken),
               refreshTokenEnc: encrypt(tokens.refresh_token ?? refreshToken),
               expiresAt: oauthExpiresAt,
-              scope: tokens.scope ?? row.scope ?? "",
+              scope: tokens.scope ?? tokensRow.scope ?? "",
               updatedAt: new Date(),
             })
             .where(eq(volvoTokens.userId, userId));
-          refreshed = true;
         }
       } catch (e) {
         console.error("token refresh failed", e);
@@ -124,9 +117,9 @@ export async function loadUserVehicleAndCreds(userId: string): Promise<Loaded | 
       : null;
 
   const perApi: Record<ApiKind, string | null> = {
-    energy: decryptIfFresh(row.energyTokenEnc, row.energyExpiresAt),
-    conve: decryptIfFresh(row.conveTokenEnc, row.conveExpiresAt),
-    location: decryptIfFresh(row.locationTokenEnc, row.locationExpiresAt),
+    energy: decryptIfFresh(tokensRow.energyTokenEnc, tokensRow.energyExpiresAt),
+    conve: decryptIfFresh(tokensRow.conveTokenEnc, tokensRow.conveExpiresAt),
+    location: decryptIfFresh(tokensRow.locationTokenEnc, tokensRow.locationExpiresAt),
   };
 
   function credsFor(api: ApiKind): VolvoCreds | null {
@@ -135,19 +128,51 @@ export async function loadUserVehicleAndCreds(userId: string): Promise<Loaded | 
     return { accessToken: token, vccApiKey };
   }
 
+  // All vehicles linked to this user.
+  const vehicleRows = await db
+    .select({
+      vin: vehicles.vin,
+      model: vehicles.model,
+      modelYear: vehicles.modelYear,
+      fuelType: vehicles.fuelType,
+      externalColour: vehicles.externalColour,
+      batteryCapacityKwh: vehicles.batteryCapacityKwh,
+      exteriorImageUrl: vehicles.exteriorImageUrl,
+    })
+    .from(vehicles)
+    .where(eq(vehicles.userId, userId))
+    .orderBy(vehicles.vin);
+
+  // Resolve active vehicle. Auto-correct if active_vin points at a vehicle
+  // that's been removed, or if it was never set.
+  let activeVehicle = userRow.activeVin
+    ? vehicleRows.find((v) => v.vin === userRow.activeVin) ?? null
+    : null;
+  if (!activeVehicle && vehicleRows.length > 0) {
+    activeVehicle = vehicleRows[0];
+    await db.update(users).set({ activeVin: activeVehicle.vin }).where(eq(users.id, userId));
+  }
+
   return {
-    user: {
-      userId: row.userId,
-      email: row.email,
-      vin: row.vin,
-      model: row.model,
-      modelYear: row.modelYear,
-      externalColour: row.externalColour,
-      batteryCapacityKwh: row.batteryCapacityKwh,
-      exteriorImageUrl: row.exteriorImageUrl,
-    },
+    userId: userRow.id,
+    email: userRow.email,
     vccApiKey,
     credsFor,
-    refreshed,
+    vehicles: vehicleRows,
+    activeVehicle,
   };
+}
+
+/** Set the user's active vehicle. Throws if vin doesn't belong to the user. */
+export async function setActiveVehicle(userId: string, vin: string): Promise<boolean> {
+  const owned = (
+    await db
+      .select({ vin: vehicles.vin })
+      .from(vehicles)
+      .where(and(eq(vehicles.userId, userId), eq(vehicles.vin, vin)))
+      .limit(1)
+  )[0];
+  if (!owned) return false;
+  await db.update(users).set({ activeVin: vin }).where(eq(users.id, userId));
+  return true;
 }
