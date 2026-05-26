@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
-import { and, desc, eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { db } from "@/db/client";
 import { chargingSessions, stateSnapshots } from "@/db/schema";
 import { getSession } from "@/lib/session";
@@ -26,7 +26,6 @@ function fmtCoord(lat: number | null, lng: number | null): string | null {
 
 export const dynamic = "force-dynamic";
 
-const CONNECTED = new Set(["CONNECTED", "CONNECTED_AC", "CONNECTED_DC"]);
 const friendly: Record<string, string> = {
   CONNECTED: "Plugged in",
   CONNECTED_AC: "AC plugged in",
@@ -133,22 +132,12 @@ export default async function DashboardPage() {
       .limit(1)
   )[0];
 
-  const openSession = (
-    await db
-      .select()
-      .from(chargingSessions)
-      .where(and(eq(chargingSessions.vin, active.vin), eq(chargingSessions.isOpen, true)))
-      .limit(1)
-  )[0];
-
   const sessionRows = await db
     .select()
     .from(chargingSessions)
     .where(eq(chargingSessions.vin, active.vin))
     .orderBy(desc(chargingSessions.startedAt))
     .limit(50);
-
-  const isConnected = latest?.connectionStatus ? CONNECTED.has(latest.connectionStatus) : false;
 
   return (
     <main className="mx-auto w-full max-w-md flex-1 px-4 py-6">
@@ -222,26 +211,11 @@ export default async function DashboardPage() {
         </section>
       ) : null}
 
-      <section className="mt-5 flex items-center justify-between rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
-        <div>
-          <p className="text-sm font-medium">
-            {openSession ? "Session in progress" : isConnected ? "Connected" : "No active session"}
-          </p>
-          {openSession ? (
-            <p className="text-xs text-zinc-500">
-              Started {fmtRelative(openSession.startedAt)} · {openSession.startSoc}% → {latest?.soc ?? "?"}%
-            </p>
-          ) : (
-            <p className="text-xs text-zinc-500">
-              Last poll {fmtRelative(latest?.observedAt ?? null) ?? "never"}
-            </p>
-          )}
-        </div>
-        <RefreshButton />
-      </section>
-
       <section className="mt-6">
-        <h2 className="text-sm font-semibold tracking-tight">Charging sessions</h2>
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-sm font-semibold tracking-tight">Charging sessions</h2>
+          <RefreshButton />
+        </div>
         {sessionRows.length === 0 ? (
           <div className="mt-2 rounded-xl border border-dashed border-zinc-300 p-5 text-center text-xs text-zinc-500 dark:border-zinc-700">
             No sessions yet. Plug the car in (or hit{" "}
@@ -253,6 +227,15 @@ export default async function DashboardPage() {
             {sessionRows.map((s) => {
               const startLoc = fmtCoord(s.startLat, s.startLng);
               const endLoc = fmtCoord(s.endLat, s.endLng);
+              // For an in-progress session, compute live SOC + energy from the
+              // latest snapshot rather than waiting for the close to populate them.
+              const liveSoc = s.isOpen ? latest?.soc ?? null : null;
+              const displayEndSoc = s.endSoc ?? liveSoc;
+              const liveEnergyKwh =
+                s.energyKwh ??
+                (displayEndSoc != null && active.batteryCapacityKwh != null
+                  ? Math.max(0, ((displayEndSoc - s.startSoc) / 100) * active.batteryCapacityKwh)
+                  : null);
               return (
                 <li
                   key={s.id}
@@ -264,21 +247,22 @@ export default async function DashboardPage() {
                         {new Date(s.startedAt).toLocaleString()}
                       </p>
                       <p className="text-xs text-zinc-500">
+                        {liveEnergyKwh != null ? (
+                          <>+{liveEnergyKwh.toFixed(2)} kWh · </>
+                        ) : null}
                         {fmtSessionDuration(
                           new Date(s.startedAt),
                           s.endedAt ? new Date(s.endedAt) : null,
-                        )}{" "}
-                        · {s.connectionType ?? "?"}
+                        )}
+                        {" · "}
+                        {s.connectionType ?? "?"}
                         {s.isOpen ? " · in progress" : ""}
                       </p>
                     </div>
                     <div className="text-right">
                       <p className="font-mono text-sm tabular-nums">
-                        {s.startSoc}% → {s.endSoc ?? "…"}%
+                        {s.startSoc}% → {displayEndSoc != null ? `${displayEndSoc}%` : "…"}
                       </p>
-                      {s.energyKwh != null ? (
-                        <p className="text-xs text-zinc-500">+{s.energyKwh.toFixed(2)} kWh</p>
-                      ) : null}
                       {s.peakPowerKw != null ? (
                         <p className="text-xs text-zinc-500">peak {s.peakPowerKw.toFixed(1)} kW</p>
                       ) : null}
