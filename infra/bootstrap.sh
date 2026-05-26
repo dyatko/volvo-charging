@@ -105,6 +105,7 @@ if gcloud sql instances describe "$SQL_INSTANCE" >/dev/null 2>&1; then
 else
   gcloud sql instances create "$SQL_INSTANCE" \
     --database-version=POSTGRES_16 \
+    --edition=ENTERPRISE \
     --tier=db-f1-micro \
     --region="$REGION" \
     --availability-type=zonal \
