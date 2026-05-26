@@ -20,6 +20,7 @@
   "dependencies": {
     "@auth/drizzle-adapter": "^1.11.2",
     "drizzle-orm": "^0.45.2",
+    "iron-session": "^8.0.4",
     "next": "16.2.6",
     "next-auth": "^4.24.14",
     "openapi-fetch": "^0.17.0",
