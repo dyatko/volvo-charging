@@ -7,7 +7,7 @@ WORKDIR /app
 # pnpm 10+ enforces minimumReleaseAge=24h as supply-chain protection;
 # keeping it on is intentional. Locally bump that pin to the latest
 # pnpm 11.x periodically.
-COPY package.json pnpm-lock.yaml ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN corepack enable
 RUN pnpm install --frozen-lockfile
 
