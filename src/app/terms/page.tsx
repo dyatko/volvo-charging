@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Terms — Volvo Charging",
-  description: "Terms of use for Volvo Charging.",
+  title: "Terms — EV Charging History",
+  description: "Terms of use for EV Charging History.",
   alternates: { canonical: "/terms" },
 };
 
@@ -18,7 +18,7 @@ export default function TermsPage() {
         Not affiliated with Volvo
       </h2>
       <p className="mt-2">
-        Volvo Charging is an independent, personal/hobby project. It is not affiliated with,
+        EV Charging History is an independent, personal/hobby project. It is not affiliated with,
         endorsed by, or sponsored by AB Volvo, Volvo Car Group, Volvo Car USA LLC, or any
         other Volvo company. References to &quot;Volvo&quot;, the Volvo Iron Mark, and named
         Volvo APIs are made only to identify their owner.

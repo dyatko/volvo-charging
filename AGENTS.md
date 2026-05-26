@@ -12,7 +12,7 @@ Quick reference for what is new vs. older Next:
 - Use `next typegen` to refresh `PageProps`, `LayoutProps`, `RouteContext` helpers after route changes.
 <!-- END:nextjs-agent-rules -->
 
-# Volvo Charging — agent notes
+# EV Charging History — agent notes
 
 ## Project shape
 

@@ -28,7 +28,7 @@ const features = [
 const jsonLd = {
   "@context": "https://schema.org",
   "@type": "WebApplication",
-  name: "Volvo Charging",
+  name: "EV Charging History",
   applicationCategory: "UtilityApplication",
   operatingSystem: "Web",
   description:

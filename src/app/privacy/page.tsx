@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 export const metadata: Metadata = {
-  title: "Privacy — Volvo Charging",
+  title: "Privacy — EV Charging History",
   description:
-    "What data Volvo Charging stores, how long, and how to export or delete it.",
+    "What data EV Charging History stores about your Volvo, how long, and how to export or delete it.",
   alternates: { canonical: "/privacy" },
 };
 
@@ -18,7 +18,7 @@ export default function PrivacyPage() {
 
       <h2 className="mt-8 text-base font-semibold text-zinc-900 dark:text-zinc-50">Who we are</h2>
       <p className="mt-2">
-        Volvo Charging is a personal/hobby project run by Marat Dyatko
+        EV Charging History is a personal/hobby project run by Marat Dyatko
         (<a className="underline" href="mailto:i@marat.online">i@marat.online</a>). It is not
         affiliated with, endorsed by, or sponsored by AB Volvo, Volvo Car Group, Volvo Car USA
         LLC, or any other Volvo company. The Volvo trademark and the names of Volvo APIs are

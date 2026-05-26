@@ -24,27 +24,28 @@ const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: {
-    default: "Volvo Charging — live charging status & session history",
+    default: "EV Charging History — live charging status & session log for your Volvo",
     template: "%s",
   },
   description:
     "Track your Volvo's state of charge, session-by-session energy history, and live location in one mobile-first dashboard. Connects to Volvo's official Connected Vehicle, Energy, and Location APIs.",
-  applicationName: "Volvo Charging",
+  applicationName: "EV Charging History",
   authors: [{ name: "Marat Dyatko" }],
   keywords: [
-    "Volvo charging",
+    "EV charging history",
+    "EV charging log",
+    "Volvo charging history",
     "Volvo EV dashboard",
     "Volvo state of charge",
     "Volvo Energy API",
     "Volvo Connected Vehicle API",
-    "EV charging history",
     "Volvo XC40 Recharge charging",
     "Volvo EX30 charging app",
   ],
   openGraph: {
     type: "website",
-    siteName: "Volvo Charging",
-    title: "Volvo Charging — live charging status & session history",
+    siteName: "EV Charging History",
+    title: "EV Charging History — live charging status & session log for your Volvo",
     description:
       "Mobile-first dashboard for your Volvo's state of charge, charging sessions, and live location. Built on Volvo's official Connected Vehicle, Energy, and Location APIs.",
     url: "/",
@@ -52,9 +53,9 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary",
-    title: "Volvo Charging",
+    title: "EV Charging History",
     description:
-      "Live charging status and session history for your Volvo. Built on Volvo's official APIs.",
+      "Live charging status and session log for your Volvo. Built on Volvo's official APIs.",
   },
   robots: { index: true, follow: true },
 };

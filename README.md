@@ -1,6 +1,8 @@
-# Volvo Charging
+# EV Charging History
 
 A mobile-first PWA where Volvo owners sign in and see their car's **current charging status** plus **derived charging-session history** with start/end locations — built on Volvo's public APIs.
+
+> Brand: this is the user-visible name. The repository, Cloud Run service, Artifact Registry repo, and Cloud SQL instance keep the internal identifier `volvo-charging` so the existing WIF binding, secrets, and infra references don't have to change.
 
 Currently in Phase 1: a local-first vertical slice that server-renders live Energy state for a given VIN using developer-portal credentials.
 
