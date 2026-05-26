@@ -92,16 +92,15 @@ async function loadPublicStats(): Promise<{ sessions: number; vehicles: number }
 export default async function Home({ searchParams }: { searchParams: Search }) {
   const session = await getSession();
   if (session.userId) {
-    // Only redirect to the dashboard if the dashboard can actually render
-    // for this user. Otherwise the dashboard's own "no context → redirect /"
-    // bounces us back here and we get ERR_TOO_MANY_REDIRECTS.
+    // Only redirect to the dashboard if it can actually render for this user.
+    // Otherwise /dashboard's own "no context → redirect /" bounces us back
+    // here and we get ERR_TOO_MANY_REDIRECTS. We can't destroy the session
+    // from a server component (iron-session mutates the cookie, which throws
+    // in RSC), so we just fall through and show the landing; the next sign-in
+    // overwrites the cookie.
     const ctx = await loadUserContext(session.userId).catch(() => null);
     if (ctx && ctx.activeVehicle) {
       redirect("/dashboard");
-    } else {
-      // Broken state (missing creds/tokens, no vehicle, failed refresh).
-      // Drop the session so the user can sign in again cleanly.
-      session.destroy();
     }
   }
 
