@@ -14,7 +14,7 @@ export default function PrivacyPage() {
       <h1 className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
         Privacy
       </h1>
-      <p className="mt-1 text-xs text-zinc-500">Last updated 2026-05-26</p>
+      <p className="mt-1 text-xs text-zinc-500">Last updated 2026-06-01</p>
 
       <h2 className="mt-8 text-base font-semibold text-zinc-900 dark:text-zinc-50">Who we are</h2>
       <p className="mt-2">
@@ -45,6 +45,19 @@ export default function PrivacyPage() {
           start/end coordinates).
         </li>
         <li>
+          When a session has coordinates, a coarse <strong>place label</strong>
+          {" "}(&quot;Area · City&quot;, never a street address) derived by sending the
+          rounded coordinate to Google&apos;s Geocoding API. It&apos;s kept in a shared,
+          location-keyed cache — keyed by the rounded (~111&nbsp;m) coordinate, not by you
+          or your VIN — so a given spot is resolved once and reused. See{" "}
+          <a className="underline" href="#maps">Maps &amp; geocoding</a> below.
+        </li>
+        <li>
+          The time of your <strong>last sign-in or dashboard view</strong>. We use it to
+          decide how often to poll your vehicle — more frequently while you&apos;re actively
+          using the app.
+        </li>
+        <li>
           Your <strong>OAuth refresh and access tokens</strong>, encrypted at rest with
           AES-256-GCM. Used solely to call Volvo&apos;s APIs on your behalf.
         </li>
@@ -55,7 +68,10 @@ export default function PrivacyPage() {
       </ul>
       <p className="mt-2">
         We do <strong>not</strong> store your Volvo ID password or email. We do not embed
-        third-party analytics, advertising, or tracking scripts.
+        third-party analytics, advertising, or tracking scripts. The only third-party code
+        we ever load in your browser is Google Maps — on the dashboard, only when you have
+        charging locations to plot, and only to draw the map (see{" "}
+        <a className="underline" href="#maps">Maps &amp; geocoding</a> below).
       </p>
 
       <h2 className="mt-8 text-base font-semibold text-zinc-900 dark:text-zinc-50">
@@ -65,8 +81,50 @@ export default function PrivacyPage() {
         All data is processed in <strong>Google Cloud, region <code>europe-north1</code>
         </strong> (Stockholm, Sweden). Sub-processors: Google Cloud Run (compute), Cloud SQL
         for PostgreSQL (storage), Secret Manager (encryption keys), Cloud Scheduler (polling
-        timer), Cloud Logging (operational logs, redacted to last-4 VIN). No data leaves the
-        European Union.
+        timer), Cloud Logging (operational logs, redacted to last-4 VIN). All of your stored
+        data lives in the EU. The one outbound exception is the Maps &amp; geocoding feature
+        described below, which shares coordinates with Google Maps Platform outside the EU.
+      </p>
+
+      <h2 id="maps" className="mt-8 text-base font-semibold text-zinc-900 dark:text-zinc-50">
+        Maps &amp; geocoding
+      </h2>
+      <p className="mt-2">
+        To turn raw charging coordinates into something readable, we use{" "}
+        <strong>Google Maps Platform</strong> in two places:
+      </p>
+      <ul className="mt-2 list-disc space-y-1 pl-5">
+        <li>
+          <strong>Reverse geocoding (server-side).</strong> When a session has a location,
+          we send the <em>rounded</em> coordinate (~111&nbsp;m grid) to Google&apos;s
+          Geocoding API to get a coarse &quot;Area · City&quot; label, then cache it. We never
+          send your full-precision position, and we only ask for an area and city — never a
+          street address.
+        </li>
+        <li>
+          <strong>The dashboard map (in your browser).</strong> When you have charging
+          locations to plot, the dashboard loads Google&apos;s Maps JavaScript to draw them.
+          Your browser talks to Google directly, so Google receives your IP address and the
+          coordinates being shown, and may set its own cookies. The map loads only when
+          there&apos;s something to plot; the rest of the app works without it.
+        </li>
+      </ul>
+      <p className="mt-2">
+        Google Maps Platform is therefore a <strong>sub-processor</strong>, and these two
+        calls are the only time your data is processed <strong>outside the EU</strong>. That
+        transfer relies on Google&apos;s Standard Contractual Clauses and its EU–US Data
+        Privacy Framework certification. Google&apos;s handling of this data is governed by its
+        own{" "}
+        <a
+          className="underline"
+          href="https://policies.google.com/privacy"
+          target="_blank"
+          rel="noreferrer"
+        >
+          privacy policy
+        </a>
+        . If no Google Maps key is configured, both features stay off and no coordinates are
+        shared.
       </p>
 
       <h2 className="mt-8 text-base font-semibold text-zinc-900 dark:text-zinc-50">
@@ -135,9 +193,11 @@ export default function PrivacyPage() {
         Cookies
       </h2>
       <p className="mt-2">
-        One session cookie (<code>volvo_charging_session</code>), HTTP-only, encrypted and
-        signed by the server using iron-session. No tracking, no analytics, no third-party
-        cookies.
+        One first-party session cookie (<code>volvo_charging_session</code>), HTTP-only,
+        encrypted and signed by the server using iron-session. We set no tracking or analytics
+        cookies of our own. The only third-party cookies that can appear are Google&apos;s, set
+        by the dashboard map when it loads (see <a className="underline" href="#maps">Maps
+        &amp; geocoding</a> above) — never on the public pages.
       </p>
 
       <h2 className="mt-8 text-base font-semibold text-zinc-900 dark:text-zinc-50">

@@ -12,7 +12,7 @@ export default function TermsPage() {
       <h1 className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
         Terms of use
       </h1>
-      <p className="mt-1 text-xs text-zinc-500">Last updated 2026-05-26</p>
+      <p className="mt-1 text-xs text-zinc-500">Last updated 2026-06-01</p>
 
       <h2 className="mt-8 text-base font-semibold text-zinc-900 dark:text-zinc-50">
         Not affiliated with Volvo
@@ -49,7 +49,7 @@ export default function TermsPage() {
         Limitation of liability
       </h2>
       <p className="mt-2">
-        To the maximum extent permitted by law, the operator of Volvo Charging is not
+        To the maximum extent permitted by law, the operator of EV Charging History is not
         liable for any direct, indirect, incidental, consequential, or punitive damages
         arising out of your use of this service, including but not limited to: relying on
         inaccurate charging data, missed notifications, service downtime, loss of session
