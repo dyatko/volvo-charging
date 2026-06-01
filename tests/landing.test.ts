@@ -84,6 +84,7 @@ describe("Home (/)", () => {
     vi.mocked(loadUserContext).mockResolvedValue({
       userId: "user-1",
       email: null,
+      userLastSeenAt: null,
       vccApiKey: "k",
       credsFor: () => null,
       vehicles: [{ vin: "v1" } as never],
@@ -125,6 +126,7 @@ describe("Home (/)", () => {
     vi.mocked(loadUserContext).mockResolvedValue({
       userId: "user-1",
       email: null,
+      userLastSeenAt: null,
       vccApiKey: "k",
       credsFor: () => null,
       vehicles: [],

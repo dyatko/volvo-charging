@@ -21,6 +21,7 @@ export type VehicleRow = {
   currentLng: number | null;
   locationUpdatedAt: Date | null;
   lastSeenAt: Date | null;
+  nextPollAt: Date;
 };
 
 export type ApiKind = "energy" | "conve" | "location";
@@ -33,6 +34,8 @@ export type UserCreds = {
 export type UserContext = UserCreds & {
   userId: string;
   email: string | null;
+  /** Last login / dashboard view — drives the user-active polling cadence. */
+  userLastSeenAt: Date | null;
   vehicles: VehicleRow[];
   activeVehicle: VehicleRow | null;
 };
@@ -154,6 +157,7 @@ export async function loadUserContext(userId: string): Promise<UserContext | nul
       currentLng: vehicles.currentLng,
       locationUpdatedAt: vehicles.locationUpdatedAt,
       lastSeenAt: vehicles.lastSeenAt,
+      nextPollAt: vehicles.nextPollAt,
     })
     .from(vehicles)
     .where(eq(vehicles.userId, userId))
@@ -172,6 +176,7 @@ export async function loadUserContext(userId: string): Promise<UserContext | nul
   return {
     userId: userRow.id,
     email: userRow.email,
+    userLastSeenAt: userRow.lastSeenAt,
     vccApiKey,
     credsFor,
     vehicles: vehicleRows,

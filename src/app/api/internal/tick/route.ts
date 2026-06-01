@@ -16,21 +16,25 @@ export async function POST(req: Request) {
   }
 
   const allUsers = await db.select({ id: users.id }).from(users);
-  let pollAttempts = 0;
+  let polled = 0;
+  let skipped = 0;
   let snapshotsInserted = 0;
   for (const u of allUsers) {
     const ctx = await loadUserContext(u.id);
     if (!ctx || ctx.vehicles.length === 0) continue;
-    const results = await pollAllVehicles(ctx);
-    pollAttempts += results.length;
+    // Adaptive cadence: only poll vehicles whose next_poll_at is due.
+    const results = await pollAllVehicles(ctx, { onlyDue: true });
     for (const r of results) {
+      if (r.outcome.ok && r.outcome.skipped) skipped += 1;
+      else polled += 1;
       if (r.outcome.ok && r.outcome.snapshotInserted) snapshotsInserted += 1;
     }
   }
   return NextResponse.json({
     ok: true,
     users: allUsers.length,
-    pollAttempts,
+    polled,
+    skipped,
     snapshotsInserted,
   });
 }

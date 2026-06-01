@@ -1,42 +1,24 @@
-import { and, desc, eq, isNull } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { db } from "@/db/client";
 import { chargingSessions, stateSnapshots, vehicles } from "@/db/schema";
 import { makeEnergyClient, makeLocationClient, pointToLatLng, type VolvoCreds } from "@/lib/volvo/client";
-import { readField } from "@/lib/volvo/state";
 import { withRetry } from "@/lib/volvo/retry";
+import {
+  classifyConnectionTransition,
+  deriveSnapshot,
+  snapshotObservablyEqual,
+} from "@/lib/snapshot";
+import { energyKwhFromSoc } from "@/lib/sessions";
+import { reverseGeocode } from "@/lib/geocoding/service";
+import {
+  decidePollInterval,
+  isConnected,
+  metersBetween,
+  MOVEMENT_THRESHOLD_M,
+} from "@/lib/pollCadence";
 import type { UserContext } from "@/lib/userVehicle";
 
 type SnapshotRow = typeof stateSnapshots.$inferInsert;
-
-/**
- * Normalise Volvo's charging-power readout to kW. The Energy API returns
- * integers tagged with a `unit` field — we've observed "watt" (e.g. 3435 W
- * for ~3.4 kW AC charging). Be defensive: also accept "kilowatt" in case
- * Volvo ever switches the unit on a given car.
- */
-function chargingPowerToKw(value: number, unit: string | undefined): number {
-  const u = (unit ?? "").toLowerCase();
-  if (u === "w" || u === "watt" || u === "watts") return value / 1000;
-  if (u === "kw" || u === "kilowatt" || u === "kilowatts") return value;
-  // Heuristic fallback: anything ≥ 1000 is almost certainly watts.
-  return value >= 1000 ? value / 1000 : value;
-}
-
-const CONNECTED_STATES = new Set(["CONNECTED", "CONNECTED_AC", "CONNECTED_DC"]);
-
-function isConnected(s: string | null | undefined): boolean {
-  return !!s && CONNECTED_STATES.has(s);
-}
-
-function maxIsoDate(values: (string | null | undefined)[]): Date {
-  let max = 0;
-  for (const v of values) {
-    if (!v) continue;
-    const t = Date.parse(v);
-    if (!Number.isNaN(t) && t > max) max = t;
-  }
-  return max ? new Date(max) : new Date();
-}
 
 export type PollOutcome =
   | {
@@ -44,6 +26,8 @@ export type PollOutcome =
       snapshotInserted: boolean;
       observedAt: Date;
       transition?: "opened" | "closed" | "none";
+      /** Set when the cadence gate skipped the poll (no API call made). */
+      skipped?: boolean;
     }
   | { ok: false; reason: string; status?: number };
 
@@ -54,50 +38,32 @@ export async function pollOne(opts: {
   /** Optional — when absent we skip location capture at session boundaries. */
   locationCreds?: VolvoCreds | null;
   batteryCapacityKwh: number | null;
+  /** Previously stored position, for movement detection (Location delta). */
+  prevLat?: number | null;
+  prevLng?: number | null;
+  /** When the owner was last seen — feeds the user-active cadence rule. */
+  userLastSeenAt?: Date | null;
 }): Promise<PollOutcome> {
   const energy = makeEnergyClient(opts.energyCreds);
   const { data, error, response } = await withRetry(() =>
     energy.GET("/vehicles/{vin}/state", { params: { path: { vin: opts.vin } } }),
   );
   if (error || !data) {
+    // Back off lightly: retry at ~1 min rather than hammering a failing
+    // vehicle on every tick, and keep a visible failure count.
+    await db
+      .update(vehicles)
+      .set({
+        nextPollAt: new Date(Date.now() + 60_000),
+        consecutiveFailures: sql`${vehicles.consecutiveFailures} + 1`,
+      })
+      .where(eq(vehicles.vin, opts.vin));
     return { ok: false, reason: JSON.stringify(error ?? "unknown"), status: response?.status };
   }
 
-  const battery = readField(data.batteryChargeLevel);
-  const range = readField(data.electricRange);
-  const conn = readField(data.chargerConnectionStatus);
-  const charging = readField(data.chargingStatus);
-  const chargingType = readField(data.chargingType);
-  const chargerPower = readField(data.chargerPowerStatus);
-  const chargingPower = readField(data.chargingPower);
-  const targetSoc = readField(data.targetBatteryChargeLevel);
-  const currentLimit = readField(data.chargingCurrentLimit);
-
-  const observedAt = maxIsoDate([
-    battery.ok ? battery.updatedAt : null,
-    range.ok ? range.updatedAt : null,
-    conn.ok ? conn.updatedAt : null,
-    charging.ok ? charging.updatedAt : null,
-    chargingType.ok ? chargingType.updatedAt : null,
-    chargerPower.ok ? chargerPower.updatedAt : null,
-    chargingPower.ok ? chargingPower.updatedAt : null,
-  ]);
-
-  const next: SnapshotRow = {
-    vin: opts.vin,
-    observedAt,
-    soc: battery.ok ? Math.round(Number(battery.value)) : null,
-    rangeKm: range.ok ? Math.round(Number(range.value)) : null,
-    connectionStatus: conn.ok ? String(conn.value) : null,
-    chargingStatus: charging.ok ? String(charging.value) : null,
-    chargingType: chargingType.ok ? String(chargingType.value) : null,
-    chargerPowerStatus: chargerPower.ok ? String(chargerPower.value) : null,
-    chargingPowerKw: chargingPower.ok
-      ? chargingPowerToKw(Number(chargingPower.value), chargingPower.unit)
-      : null,
-    targetSoc: targetSoc.ok ? Math.round(Number(targetSoc.value)) : null,
-    currentLimitA: currentLimit.ok ? Math.round(Number(currentLimit.value)) : null,
-  };
+  const derived = deriveSnapshot(data);
+  const observedAt = derived.observedAt;
+  const next: SnapshotRow = { vin: opts.vin, ...derived };
 
   // Dedup: skip if no observable field changed since the previous snapshot.
   const prev = (
@@ -109,29 +75,32 @@ export async function pollOne(opts: {
       .limit(1)
   )[0];
 
-  const observableEqual =
-    prev &&
-    prev.soc === next.soc &&
-    prev.rangeKm === next.rangeKm &&
-    prev.connectionStatus === next.connectionStatus &&
-    prev.chargingStatus === next.chargingStatus &&
-    prev.chargingType === next.chargingType &&
-    prev.chargerPowerStatus === next.chargerPowerStatus &&
-    prev.chargingPowerKw === next.chargingPowerKw &&
-    prev.targetSoc === next.targetSoc &&
-    prev.currentLimitA === next.currentLimitA;
+  const observableEqual = prev && snapshotObservablyEqual(prev, derived);
 
-  // Always bump vehicle.last_seen + next_poll regardless of dedup.
-  await db
-    .update(vehicles)
-    .set({
-      lastSeenAt: new Date(),
-      nextPollAt: new Date(Date.now() + 60_000),
-      consecutiveFailures: 0,
-    })
-    .where(eq(vehicles.vin, opts.vin));
+  const now = Date.now();
 
   if (observableEqual) {
+    // Nothing changed: no insert, no Location call. Still bump last_seen and
+    // schedule the next poll from the (unchanged) state — a parked car that
+    // last changed long ago slips to the idle cadence.
+    const interval = decidePollInterval(
+      {
+        connectionStatus: next.connectionStatus ?? null,
+        chargingStatus: next.chargingStatus ?? null,
+        lastChangeAt: prev?.observedAt ?? observedAt,
+        moved: false,
+        userLastSeenAt: opts.userLastSeenAt ?? null,
+      },
+      now,
+    );
+    await db
+      .update(vehicles)
+      .set({
+        lastSeenAt: new Date(now),
+        nextPollAt: new Date(now + interval),
+        consecutiveFailures: 0,
+      })
+      .where(eq(vehicles.vin, opts.vin));
     return { ok: true, snapshotInserted: false, observedAt, transition: "none" };
   }
 
@@ -154,6 +123,10 @@ export async function pollOne(opts: {
           locationUpdatedAt: new Date(),
         })
         .where(eq(vehicles.vin, opts.vin));
+      // Warm the geocode cache for this position. One call per poll covers the
+      // session start/end coords too (they equal liveLocation and the cache is
+      // position-keyed). Best-effort: a geocode failure must never affect the poll.
+      await reverseGeocode(liveLocation.lat, liveLocation.lng).catch(() => null);
     }
   }
 
@@ -168,10 +141,11 @@ export async function pollOne(opts: {
   // interval, which is what humans usually mean when they say "this charge."
   const wasConnected = isConnected(prev?.connectionStatus ?? null);
   const isConn = isConnected(next.connectionStatus);
+  const transitionKind = classifyConnectionTransition(wasConnected, isConn);
 
   let transition: "opened" | "closed" | "none" = "none";
 
-  if (!wasConnected && isConn) {
+  if (transitionKind === "opened") {
     // DISCONNECTED → CONNECTED*: open a session, reuse the live location.
     await db.insert(chargingSessions).values({
       vin: opts.vin,
@@ -183,7 +157,7 @@ export async function pollOne(opts: {
       isOpen: true,
     });
     transition = "opened";
-  } else if (wasConnected && !isConn) {
+  } else if (transitionKind === "closed") {
     // CONNECTED* → DISCONNECTED: close the open session, reuse the live location.
     const open = (
       await db
@@ -195,10 +169,7 @@ export async function pollOne(opts: {
     if (open) {
       const location = liveLocation;
       const endSoc = next.soc ?? open.startSoc;
-      const energyKwh =
-        opts.batteryCapacityKwh != null
-          ? Math.max(0, (endSoc - open.startSoc) / 100) * opts.batteryCapacityKwh
-          : null;
+      const energyKwh = energyKwhFromSoc(open.startSoc, endSoc, opts.batteryCapacityKwh);
       await db
         .update(chargingSessions)
         .set({
@@ -212,7 +183,7 @@ export async function pollOne(opts: {
         .where(eq(chargingSessions.id, open.id));
       transition = "closed";
     }
-  } else if (wasConnected && isConn && next.chargingPowerKw != null) {
+  } else if (transitionKind === "still-connected" && next.chargingPowerKw != null) {
     // While charging, keep peak power up to date on the open session.
     const open = (
       await db
@@ -232,6 +203,36 @@ export async function pollOne(opts: {
     }
   }
 
+  // Movement: did the car's position move since the last stored fix? This
+  // tells a driving car apart from one whose SOC/range merely drifted while
+  // parked. Only meaningful when we actually fetched a fresh Location.
+  const moved =
+    !!liveLocation &&
+    opts.prevLat != null &&
+    opts.prevLng != null &&
+    metersBetween(opts.prevLat, opts.prevLng, liveLocation.lat, liveLocation.lng) >
+      MOVEMENT_THRESHOLD_M;
+
+  // Something just changed, so lastChangeAt is now.
+  const interval = decidePollInterval(
+    {
+      connectionStatus: next.connectionStatus ?? null,
+      chargingStatus: next.chargingStatus ?? null,
+      lastChangeAt: observedAt,
+      moved,
+      userLastSeenAt: opts.userLastSeenAt ?? null,
+    },
+    now,
+  );
+  await db
+    .update(vehicles)
+    .set({
+      lastSeenAt: new Date(now),
+      nextPollAt: new Date(now + interval),
+      consecutiveFailures: 0,
+    })
+    .where(eq(vehicles.vin, opts.vin));
+
   return { ok: true, snapshotInserted: true, observedAt, transition };
 }
 
@@ -247,7 +248,7 @@ async function fetchLocation(vin: string, creds: VolvoCreds) {
   }
 }
 
-/** Older snapshot read helper used by the dashboard. */
+/** Most recent state_snapshots row for a VIN (the dashboard's "latest" read). */
 export async function latestSnapshot(vin: string) {
   return (
     await db
@@ -259,17 +260,20 @@ export async function latestSnapshot(vin: string) {
   )[0];
 }
 
-// Marker exported for clarity in places that filter "currently charging" sessions.
-export const openSessionFilter = isNull(chargingSessions.endedAt);
-
 /**
  * Poll every vehicle linked to the user, in parallel. Returns per-vehicle
  * outcomes. Skips polling if no usable Energy creds — caller decides whether
  * to surface that to the UI.
+ *
+ * `opts.onlyDue` applies the adaptive cadence gate: a vehicle whose
+ * `nextPollAt` is still in the future is skipped (no API call). The scheduler
+ * tick passes this; the dashboard's user-initiated refresh does not (it always
+ * forces a fresh read).
  */
-export async function pollAllVehicles(ctx: UserContext): Promise<
-  Array<{ vin: string; outcome: PollOutcome }>
-> {
+export async function pollAllVehicles(
+  ctx: UserContext,
+  opts: { onlyDue?: boolean } = {},
+): Promise<Array<{ vin: string; outcome: PollOutcome }>> {
   const energyCreds = ctx.credsFor("energy");
   if (!energyCreds) {
     return ctx.vehicles.map((v) => ({
@@ -278,15 +282,27 @@ export async function pollAllVehicles(ctx: UserContext): Promise<
     }));
   }
   const locationCreds = ctx.credsFor("location");
+  const now = Date.now();
   return Promise.all(
-    ctx.vehicles.map(async (v) => ({
-      vin: v.vin,
-      outcome: await pollOne({
+    ctx.vehicles.map(async (v) => {
+      if (opts.onlyDue && v.nextPollAt.getTime() > now) {
+        return {
+          vin: v.vin,
+          outcome: { ok: true, snapshotInserted: false, observedAt: v.nextPollAt, skipped: true } as PollOutcome,
+        };
+      }
+      return {
         vin: v.vin,
-        energyCreds,
-        locationCreds,
-        batteryCapacityKwh: v.batteryCapacityKwh,
-      }).catch((e) => ({ ok: false, reason: e instanceof Error ? e.message : String(e) } as PollOutcome)),
-    })),
+        outcome: await pollOne({
+          vin: v.vin,
+          energyCreds,
+          locationCreds,
+          batteryCapacityKwh: v.batteryCapacityKwh,
+          prevLat: v.currentLat,
+          prevLng: v.currentLng,
+          userLastSeenAt: ctx.userLastSeenAt,
+        }).catch((e) => ({ ok: false, reason: e instanceof Error ? e.message : String(e) } as PollOutcome)),
+      };
+    }),
   );
 }
