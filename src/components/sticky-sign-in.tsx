@@ -3,34 +3,22 @@
 import { useEffect, useState } from "react";
 
 export function StickySignIn() {
-  const [heroVisible, setHeroVisible] = useState(true);
+  // This is the page's only sign-in CTA, so it stays on screen from load —
+  // it only retracts once the footer scrolls into view, to avoid covering it.
   const [footerVisible, setFooterVisible] = useState(false);
 
   useEffect(() => {
-    const hero = document.getElementById("hero-cta");
     const footer = document.getElementById("site-footer");
-    const observers: IntersectionObserver[] = [];
-
-    if (hero) {
-      const o = new IntersectionObserver(
-        ([entry]) => setHeroVisible(entry.isIntersecting),
-        { threshold: 0, rootMargin: "0px 0px -20% 0px" },
-      );
-      o.observe(hero);
-      observers.push(o);
-    }
-    if (footer) {
-      const o = new IntersectionObserver(
-        ([entry]) => setFooterVisible(entry.isIntersecting),
-        { threshold: 0 },
-      );
-      o.observe(footer);
-      observers.push(o);
-    }
-    return () => observers.forEach((o) => o.disconnect());
+    if (!footer) return;
+    const o = new IntersectionObserver(
+      ([entry]) => setFooterVisible(entry.isIntersecting),
+      { threshold: 0 },
+    );
+    o.observe(footer);
+    return () => o.disconnect();
   }, []);
 
-  const show = !heroVisible && !footerVisible;
+  const show = !footerVisible;
 
   return (
     <div
@@ -40,12 +28,18 @@ export function StickySignIn() {
         (show ? "translate-y-0" : "pointer-events-none translate-y-full")
       }
     >
-      <a
-        href="/api/auth/start"
-        className="mx-auto flex max-w-md items-center justify-center rounded-lg bg-zinc-900 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-zinc-900/20 hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:shadow-zinc-100/10 dark:hover:bg-zinc-200"
-      >
-        Sign in with Volvo ID →
-      </a>
+      <div className="mx-auto max-w-md">
+        <a
+          href="/api/auth/start"
+          className="flex items-center justify-center rounded-lg bg-zinc-900 px-4 py-3 font-mono text-sm font-semibold uppercase tracking-[0.08em] text-white shadow-lg shadow-zinc-900/20 hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:shadow-zinc-100/10 dark:hover:bg-zinc-200"
+        >
+          Sign in with Volvo ID →
+        </a>
+        <p className="mt-2 text-center text-xs text-zinc-500">
+          You sign in on Volvo&apos;s own page (official OAuth 2.0 + PKCE) — we never see
+          your password — then return to your dashboard with live charging state ready.
+        </p>
+      </div>
     </div>
   );
 }

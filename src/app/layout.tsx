@@ -79,7 +79,7 @@ export async function generateMetadata(): Promise<Metadata> {
     //
     // `app/icon.svg` is auto-included by file convention and theme-adapts via
     // `prefers-color-scheme` inside the SVG. The two `.ico` files below give
-    // older browsers (that don't honor SVG favicons) a theme-aware fallback.
+    // older browsers (that don't honour SVG favicons) a theme-aware fallback.
     icons: {
       icon: [
         { url: "/favicon-light.ico", media: "(prefers-color-scheme: light)" },
@@ -126,6 +126,7 @@ export default async function RootLayout({
         currentLng: vehicles.currentLng,
         locationUpdatedAt: vehicles.locationUpdatedAt,
         lastSeenAt: vehicles.lastSeenAt,
+        nextPollAt: vehicles.nextPollAt,
       })
       .from(vehicles)
       .where(eq(vehicles.userId, session.userId))
@@ -148,9 +149,29 @@ export default async function RootLayout({
   return (
     <html
       lang="en"
+      suppressHydrationWarning
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col bg-zinc-50 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100">
+      {/* Browser extensions (Grammarly, etc.) inject data-* attributes onto
+          <body> before hydration, which trips React's mismatch warning. Suppress
+          it one level deep — this hides only <body>'s own attribute diffs, not
+          any real mismatch in the tree below. */}
+      <body
+        suppressHydrationWarning
+        className="min-h-full flex flex-col bg-zinc-50 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100"
+      >
+        {/* Set the theme before first paint so there's no flash: honour the
+            stored choice (the ThemeToggle), else fall back to the OS preference.
+            Runs synchronously as <body>'s first child, ahead of any content.
+            Mirrors the localStorage contract in src/components/theme-toggle.tsx
+            ("theme" → "light" | "dark"; absent → follow the OS); <html> carries
+            suppressHydrationWarning because this mutates its data-theme. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              "(()=>{try{var t=localStorage.getItem('theme');document.documentElement.dataset.theme=(t==='light'||t==='dark')?t:(matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light')}catch(e){}})()",
+          }}
+        />
         <Nav {...navProps} />
         <div className="flex flex-1 flex-col">{children}</div>
         <Footer />

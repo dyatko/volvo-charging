@@ -1,12 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 export function DangerZone() {
   const [showConfirm, setShowConfirm] = useState(false);
   return (
-    <details className="mt-6 rounded-lg border border-zinc-200 bg-white p-3 text-xs text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400">
-      <summary className="cursor-pointer">Privacy & account</summary>
+    <details className="mt-6 py-3 text-xs text-zinc-600 dark:text-zinc-400">
+      <summary className="cursor-pointer">Your data and account</summary>
       <div className="mt-3 space-y-2">
         <p>
           We hold your VIN, charging state, and session history. You can take it with you or
@@ -47,6 +48,9 @@ export function DangerZone() {
               </button>
             </form>
           )}
+        </div>
+        <div className="flex items-center gap-2 border-t border-zinc-200/70 pt-2 dark:border-zinc-800">
+          <ThemeToggle />
         </div>
       </div>
     </details>

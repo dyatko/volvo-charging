@@ -1,5 +1,12 @@
 @import "tailwindcss";
 
+/* Manual theme override: `dark:` utilities key off a `data-theme="dark"`
+   attribute on <html> instead of `prefers-color-scheme`, so the in-app theme
+   toggle can override the OS. An inline script in the root layout sets the
+   attribute before first paint (from localStorage, falling back to the OS), so
+   there's no flash. See ThemeToggle in src/components/theme-toggle.tsx. */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
 :root {
   --background: #ffffff;
   --foreground: #171717;
@@ -12,11 +19,9 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+:root[data-theme="dark"] {
+  --background: #0a0a0a;
+  --foreground: #ededed;
 }
 
 body {
