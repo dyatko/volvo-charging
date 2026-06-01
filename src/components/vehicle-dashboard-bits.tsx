@@ -94,8 +94,8 @@ export function Divider({
     <div
       role="separator"
       aria-orientation={orientation}
-      className={`${shape} shrink-0 from-transparent via-zinc-300/45 to-transparent dark:via-zinc-800/25${
-        className ? ` ${className}` : ""
+      className={`${shape} shrink-0 from-transparent via-zinc-300/45 to-transparent dark:via-zinc-600/30 ${
+        className ? className : ""
       }`}
     />
   );
