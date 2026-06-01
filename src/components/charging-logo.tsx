@@ -1,4 +1,5 @@
 import type { SVGProps } from "react";
+import { BRAND_GREEN, BRAND_ORANGE, BRAND_RED } from "@/lib/brand";
 
 export type ChargingLogoState = "low" | "mid" | "high";
 
@@ -20,7 +21,7 @@ const BAR_Y = [42, 55, 68] as const;
 export function ChargingLogo({ soc, state: override, title, ...rest }: Props) {
   const state = override ?? stateFromSoc(soc);
   const active =
-    state === "low" ? "#E53935" : state === "mid" ? "#FF8A00" : "#00C853";
+    state === "low" ? BRAND_RED : state === "mid" ? BRAND_ORANGE : BRAND_GREEN;
   const filled =
     state === "low" ? [false, false, true] : state === "mid" ? [false, true, true] : [true, true, true];
 
