@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { formatLocalDateTime, useIsClient } from "@/components/local-time";
 
 function format(ms: number): string {
   const sec = Math.floor((Date.now() - ms) / 1000);
@@ -15,6 +16,7 @@ export function RelativeTime({ iso }: { iso: string | null }) {
   // Drive re-renders with a 1-Hz tick; derive the label during render so we
   // don't setState synchronously inside the effect (react-hooks/set-state-in-effect).
   const [, setTick] = useState(0);
+  const isClient = useIsClient();
 
   useEffect(() => {
     if (ms == null) return;
@@ -23,5 +25,12 @@ export function RelativeTime({ iso }: { iso: string | null }) {
   }, [ms]);
 
   const label = ms != null ? format(ms) : "—";
-  return <span suppressHydrationWarning>{label}</span>;
+  // Absolute local time for the hover tooltip — only on the client, so it
+  // reflects the viewer's locale + timezone without an SSR mismatch.
+  const title = isClient && iso ? formatLocalDateTime(iso) || undefined : undefined;
+  return (
+    <span suppressHydrationWarning title={title}>
+      {label}
+    </span>
+  );
 }
