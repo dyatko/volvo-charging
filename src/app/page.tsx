@@ -7,6 +7,9 @@ import { getSession } from "@/lib/session";
 import { publicOriginFromHeaders } from "@/lib/origin";
 import { TestTokenForm } from "@/components/test-token-form";
 import { StickySignIn } from "@/components/sticky-sign-in";
+import { VehicleDashboard } from "@/components/vehicle-dashboard";
+import { demoVehicleDashboard } from "@/lib/dashboard/adapt";
+import { getGoogleMapsBrowserKey, getGoogleMapsMapId } from "@/lib/maps/config";
 import { db } from "@/db/client";
 import { chargingSessions, vehicles } from "@/db/schema";
 import { loadUserContext } from "@/lib/userVehicle";
@@ -168,31 +171,28 @@ export default async function Home({ searchParams }: { searchParams: Search }) {
               </Link>
             </div>
           ) : null}
-          {!showTestToken ? <OAuthSignIn /> : <><TestTokenIntro /><TestTokenForm /></>}
+          {!showTestToken ? <DashboardPreview /> : <><TestTokenIntro /><TestTokenForm /></>}
         </div>
       </section>
 
       {/* Features ─────────────────────────────────────────────────── */}
-      <section className="mt-14 grid gap-4 sm:grid-cols-2">
+      <section className="mt-16 grid gap-x-10 gap-y-9 sm:grid-cols-2">
         {features.map((f) => (
-          <article
-            key={f.title}
-            className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
-          >
-            <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-50">
-              <span className="mr-1.5" aria-hidden>
-                {f.emoji}
-              </span>
-              {f.title}
-            </h2>
-            <p className="mt-1.5 text-sm leading-6 text-zinc-600 dark:text-zinc-400">{f.body}</p>
+          <article key={f.title} className="flex gap-3.5">
+            <span className="shrink-0 text-2xl leading-none" aria-hidden>
+              {f.emoji}
+            </span>
+            <div>
+              <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-50">{f.title}</h2>
+              <p className="mt-1.5 text-sm leading-6 text-zinc-600 dark:text-zinc-400">{f.body}</p>
+            </div>
           </article>
         ))}
       </section>
 
       {/* Live stats ───────────────────────────────────────────────── */}
       {stats && stats.vehicles > 0 ? (
-        <section className="mt-14 flex flex-col items-center gap-2 text-center">
+        <section className="mt-16 flex flex-col items-center gap-2 text-center">
           <p className="text-xs font-medium uppercase tracking-[0.2em] text-zinc-500 dark:text-zinc-400">
             So far
           </p>
@@ -210,7 +210,7 @@ export default async function Home({ searchParams }: { searchParams: Search }) {
       ) : null}
 
       {/* Trust / scope ────────────────────────────────────────────── */}
-      <section className="mt-14 rounded-xl border border-zinc-200 bg-white p-5 text-sm leading-6 text-zinc-600 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400">
+      <section className="mt-16 border-t border-zinc-200 pt-10 text-sm leading-6 text-zinc-600 dark:border-zinc-800 dark:text-zinc-400">
         <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-50">
           How it works
         </h2>
@@ -260,25 +260,28 @@ export default async function Home({ searchParams }: { searchParams: Search }) {
   );
 }
 
-function OAuthSignIn() {
+function DashboardPreview() {
   return (
-    <div
-      id="hero-cta"
-      className="mt-4 rounded-xl border border-zinc-200 bg-white p-6 text-sm shadow-sm dark:border-zinc-800 dark:bg-zinc-950"
-    >
-      <p className="text-zinc-600 dark:text-zinc-400">
-        You&apos;ll be sent to Volvo&apos;s sign-in page. After approving access, you&apos;ll
-        land back on your dashboard with your live charging state ready.
-      </p>
-      <a
-        href="/api/auth/start"
-        className="mt-5 inline-flex w-full items-center justify-center rounded-lg bg-zinc-900 px-4 py-3.5 text-base font-semibold text-white shadow-lg shadow-zinc-900/15 ring-1 ring-zinc-900/5 transition hover:-translate-y-px hover:bg-zinc-800 hover:shadow-xl dark:bg-zinc-100 dark:text-zinc-900 dark:shadow-zinc-100/10 dark:ring-white/10 dark:hover:bg-zinc-200"
-      >
-        Sign in with Volvo ID →
-      </a>
-      <p className="mt-3 text-center text-xs text-zinc-500">
-        Uses Volvo&apos;s official OAuth 2.0 + PKCE. We never see your password.
-      </p>
+    <div className="relative -mx-5.25 mt-4 overflow-hidden rounded-[1.75rem] border border-zinc-200 bg-zinc-50 p-4 pt-6 text-sm shadow-2xl shadow-zinc-900/15 ring-1 ring-zinc-900/5 sm:mx-0 dark:border-zinc-800 dark:bg-zinc-950 dark:shadow-black/50 dark:ring-white/10">
+      {/* Styled like a phone screen — rounded bezel, speaker notch and a lift
+          shadow — so visitors read it as the app on a phone. A working preview
+          driven by local mock data; the diagonal corner ribbon flags it as an
+          example. The sign-in CTA + disclaimer live in the floating bar
+          (StickySignIn), so this block is preview-only. */}
+      <div
+        aria-hidden
+        className="absolute left-1/2 top-2 h-1.5 w-16 -translate-x-1/2 rounded-full bg-zinc-300 dark:bg-zinc-700"
+      />
+      <div className="pointer-events-none absolute right-0 top-0 h-30 w-30 overflow-hidden">
+        <span className="absolute -right-11 top-6.5 w-42.5 rotate-45 bg-emerald-400 py-1.25 text-center text-[9px] font-semibold uppercase tracking-[0.12em] text-emerald-950 shadow-md">
+          Live example
+        </span>
+      </div>
+      <VehicleDashboard
+        {...demoVehicleDashboard()}
+        mapApiKey={getGoogleMapsBrowserKey()}
+        mapId={getGoogleMapsMapId()}
+      />
     </div>
   );
 }
@@ -290,7 +293,7 @@ function TestTokenIntro() {
       open
     >
       <summary className="cursor-pointer font-medium">
-        When to use this — unpublished app, just kicking the tires
+        When to use this — unpublished app, just kicking the tyres
       </summary>
       <p className="mt-3 text-zinc-600 dark:text-zinc-400">
         Volvo&apos;s portal issues a separate test access token <em>per API</em>. Generate
