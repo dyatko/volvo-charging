@@ -165,6 +165,15 @@ ensure_secret_text DATA_ENCRYPTION_KEK "$(openssl rand -base64 48 | tr -d '\n')"
 # via --add-cloudsql-instances, and node-postgres connects via that Unix
 # socket using the `host` query param.
 ensure_secret_text DATABASE_URL "postgresql://${DB_USER}:${DB_PASSWORD}@/${DB_NAME}?host=/cloudsql/${INSTANCE_CONNECTION_NAME}"
+# Externally-provisioned Google Maps key. Seed a placeholder so the Cloud Run
+# deploy (which references GOOGLE_MAPS_API_KEY:latest) has a version to bind;
+# the app treats "SET_ME" as unset until you add a real version:
+#   printf '%s' "<your-key>" | gcloud secrets versions add GOOGLE_MAPS_API_KEY --data-file=-
+ensure_secret_text GOOGLE_MAPS_API_KEY "SET_ME"
+# Browser-side Maps JavaScript key (referrer-restricted). Same placeholder dance;
+# add a real version once you've created a Maps-JS-restricted key:
+#   printf '%s' "<browser-key>" | gcloud secrets versions add GOOGLE_MAPS_BROWSER_KEY --data-file=-
+ensure_secret_text GOOGLE_MAPS_BROWSER_KEY "SET_ME"
 
 echo ""
 echo "✓ Bootstrap complete."
