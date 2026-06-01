@@ -36,6 +36,20 @@
       "when": 1779795115288,
       "tag": "0004_flaky_the_leader",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1780302267093,
+      "tag": "0005_burly_obadiah_stane",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1780310566844,
+      "tag": "0006_gigantic_texas_twister",
+      "breakpoints": true
     }
   ]
 }

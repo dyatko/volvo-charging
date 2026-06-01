@@ -48,7 +48,13 @@ export async function GET() {
 
   const payload = {
     exportedAt: new Date().toISOString(),
-    user: { id: user.id, externalId: user.email, createdAt: user.createdAt, activeVin: user.activeVin },
+    user: {
+      id: user.id,
+      externalId: user.email,
+      createdAt: user.createdAt,
+      activeVin: user.activeVin,
+      lastSeenAt: user.lastSeenAt,
+    },
     vehicles: userVehicles,
     chargingSessions: sessions,
     stateSnapshots: snapshots,

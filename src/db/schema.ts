@@ -21,6 +21,9 @@ export const users = pgTable("users", {
   // consistency at write time and tolerate orphan vins on user delete.
   activeVin: text("active_vin"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  // Last login or dashboard view. Drives the "user active → poll every minute"
+  // cadence rule (see src/lib/pollCadence.ts). Null until the first sign-in.
+  lastSeenAt: timestamp("last_seen_at", { withTimezone: true }),
 });
 
 // BYOC mode: stash each user's own Volvo OAuth client credentials.
@@ -143,4 +146,27 @@ export const chargingSessions = pgTable(
       .on(t.vin)
       .where(sql`"is_open" = true`),
   ],
+);
+
+// Reverse-geocoding cache. Location-keyed (quantised lat/lng), so it's shared
+// across every vehicle and user — no VIN FK. Derived display fields are additive:
+// when Google returns nothing usable they're null and the UI falls back to raw
+// coordinates. The whole Google response is kept verbatim for future use.
+export const geocodeCache = pgTable(
+  "geocode_cache",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    // Quantised key (~3 dp ≈ 111 m, aligned with MOVEMENT_THRESHOLD_M).
+    qLat: doublePrecision("q_lat").notNull(),
+    qLng: doublePrecision("q_lng").notNull(),
+    // Derived, coarse display fields. Null → no readable address (UI shows coords).
+    city: text("city"),
+    area: text("area"),
+    label: text("label"), // precomputed "Area · City"
+    language: text("language").notNull().default("local"),
+    // The entire Google Geocoding response, verbatim.
+    responseJson: jsonb("response_json").notNull(),
+    fetchedAt: timestamp("fetched_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [uniqueIndex("geocode_cache_qlatlng_idx").on(t.qLat, t.qLng)],
 );
