@@ -41,8 +41,28 @@ src/
     ├── oauth.ts                # openid-client wrapper + RFC-7009 revoke
     ├── userVehicle.ts          # loadUserContext: per-API credsFor + active vehicle
     ├── vehicleBootstrap.ts     # bootstrapVehiclesFromConve (handles { data: … } wrapper)
-    ├── polling.ts              # pollOne + pollAllVehicles + session derivation
+    ├── polling.ts              # pollOne + pollAllVehicles (IO shell) + latestSnapshot
+    ├── snapshot.ts             # PURE: deriveSnapshot / dedup / plug-transition (tested)
+    ├── sessions.ts             # PURE: energyKwhFromSoc — shared poller ↔ dashboard
+    ├── pollCadence.ts          # PURE: adaptive next-poll interval + haversine (tested)
+    ├── env.ts                  # optionalEnv(): env value or null (SET_ME placeholder)
+    ├── brand.ts                # brand palette + hexToRgb (logo / ring / map pins)
+    ├── soc-color.ts            # PURE: socRingColor — SOC ring colour interpolation
+    ├── format.ts               # PURE: round1 / fmtKwh / fmtKw — shared number formatting
     ├── internalAuth.ts         # OIDC verification for /api/internal/*
+    ├── dashboard/              # the VehicleDashboard view-model
+    │   ├── types.ts            #   prop shapes + sessionLatLng (end ?? start) rule
+    │   └── adapt.ts            #   DB rows → props (toVehicleDashboardProps) + demo data
+    ├── geocoding/              # reverse-geocode → coarse "Area · City" (cached)
+    │   ├── service.ts          #   reverseGeocode: quantise → cache → Google → upsert
+    │   ├── labels.ts           #   resolveLocationLabels: batched, deduped name lookup
+    │   ├── address.ts          #   PURE: deriveAddress (Google result → label)
+    │   ├── quantize.ts         #   PURE: quantizeCoord / coordKey (~100 m grid)
+    │   └── config.ts           #   getGoogleMapsApiKey (server-side geocode key)
+    ├── maps/                   # overview-map helpers
+    │   ├── clusters.ts         #   PURE: clusterSessionsByLocation
+    │   ├── bounds.ts           #   PURE: inBounds (viewport filter, antimeridian-safe)
+    │   └── config.ts           #   browser Maps JS key + Map ID
     └── volvo/
         ├── client.ts           # makeEnergyClient / makeConveClient / makeLocationClient
         ├── retry.ts            # withRetry(): exp-backoff + jitter + Retry-After
@@ -72,13 +92,32 @@ pnpm-workspace.yaml             # onlyBuiltDependencies allow-list (pnpm 11 supp
 - **Rate budget.** 100 req/min per (Volvo ID, client ID) AND a 10 000 req/day per-app quota. Default polling cadence is 1/min/VIN; Location is only called when a `state_snapshots` row is actually being inserted (i.e. some observable field changed) so a parked car emits ~1 Location/day. Every outbound Volvo HTTP call MUST go through `withRetry()` in `src/lib/volvo/retry.ts` — exp-backoff with full jitter, capped at 4 attempts, respects `Retry-After` on 429.
 - **Charging sessions are derived.** They are written from `state_snapshots` transitions and can be rebuilt end-to-end. Location is the one exception (Location API only returns current position), so `*_lat/lng` columns are captured at transition time, not regenerable.
 - **Sessions are plug intervals, not charge intervals.** A session opens on DISCONNECTED → CONNECTED* and closes on CONNECTED* → DISCONNECTED. `chargingStatus` (IDLE / CHARGING / DONE) does *not* trigger a transition: a session that hits target SOC and pauses, or that gets load-balanced, stays one session for the whole plug interval. This matches what humans mean by "this charge."
+- **The landing demo mirrors the real dashboard.** The `Example` preview on `/` (`DashboardPreview` in `src/app/page.tsx`) and the signed-in `/dashboard` render the *same* `VehicleDashboard` component (`src/components/vehicle-dashboard.tsx`) — the only difference is the data. Both sides build the one view-model in `src/lib/dashboard/`: the dashboard adapts real DB rows via `toVehicleDashboardProps()` (`adapt.ts`), the landing uses `demoVehicleDashboard()` (also `adapt.ts`, `demo: true`); the prop shapes live in `types.ts`. Keep `VehicleDashboard` and its child components presentational and data-agnostic. When you add or change any dashboard feature (a new field, pill, map, session column, etc.), extend the view-model in `types.ts` and you MUST update BOTH `toVehicleDashboardProps()` *and* `demoVehicleDashboard()` so the public landing example never lags the real thing.
 - **No secrets in code or images.** `.env*` is gitignored. In production, secrets come from Google Secret Manager.
 - **Public origin, not `req.url`.** Cloud Run hands the Node process `http://0.0.0.0:8080/…` as the request URL. Every `NextResponse.redirect()` target and every public URL we mint (OAuth `redirect_uri`, OG metadata, etc.) MUST go through `publicOrigin(req)` / `publicUrl(req, path)` in `src/lib/origin.ts`. Otherwise users get redirected to literal `0.0.0.0:8080` URLs.
 - **`/api/healthz`, never `/healthz`.** Cloud Run's front-end intercepts some top-level reserved paths and returns its own 404 before the request reaches the container. Keep health and similar endpoints under `/api/*`.
 - **pnpm 11 + `minimumReleaseAge=24h`.** Pinned via `packageManager` in `package.json`; corepack picks it up in both local dev and the Dockerfile. The CI/CD pipeline runs `pnpm install --frozen-lockfile` inside the container, so packages younger than 24h cause a build failure — *that's the policy working*. Regenerate the lockfile with `pnpm install` (under pnpm 11) once a day or two have passed.
 - **`pnpm approve-builds`** writes to `pnpm-workspace.yaml`. That file is required at install time (including in the Docker build) — keep it in the COPY list.
 
+## Dates & times
+
+- **Store UTC, format in the browser.** Timestamps live in the DB as UTC. Never
+  format an absolute date/time in a server component — Cloud Run's locale is
+  `en-US`/UTC, so `new Date(x).toLocaleString()` on the server shows the wrong
+  zone. Render through `<LocalTime iso={…} />` (or `formatLocalDateTime()` for a
+  string) from `src/components/local-time.tsx`, which formats in the viewer's
+  locale + timezone client-side. Relative labels use `<RelativeTime>` (elapsed
+  time is zone-independent); it shows the absolute local time on hover.
+
+## Writing style
+
+- **British English everywhere.** All user-facing copy, metadata, and comments use UK spelling and vocabulary: `colour` not `color`, `organise`/`authorise`/`recognise` not `-ize`, `licence` (noun), `tyre` not `tire`, `behaviour`, `centre` (prose only), etc. Do **not** rename code identifiers, CSS classes (`text-center`, `color:`), API field names, or generated files — spelling rules apply to prose, not code.
+
 ## Common tasks
+
+- **Run `nvm use` first.** This project needs Node 24 (`.nvmrc`; `engines.node >=24`).
+  On an older Node, pnpm prints an "Unsupported engine" warning and the build/dev may
+  misbehave — `nvm use` selects the right version before any `pnpm` command.
 
 | Goal | Command |
 |---|---|
