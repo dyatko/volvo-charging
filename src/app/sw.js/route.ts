@@ -1,15 +1,47 @@
-// Service worker for EV Charging History.
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
+// The service worker is served from here (rather than as a static public/ file)
+// for one reason: we stamp the current deploy's build id into its first line.
+// A browser only treats a worker as "new" when its bytes differ from the
+// installed one, so a static, never-changing sw.js makes a code-only deploy
+// invisible to an already-installed PWA — it keeps serving the old cached
+// shell until the app is force-quit. Stamping the build id means every deploy
+// ships byte-different worker source, so registration.update() (see
+// src/components/sw-register.tsx) finds the new version and refreshes the app.
 //
-// One cache (`shell-v1`): app-shell HTML + static assets. The dashboard is
-// rendered by RSC with state baked into the HTML, so caching that HTML is
+// Worker logic below is otherwise unchanged from the old public/sw.js; the
+// only edit is SHELL_CACHE using string concatenation instead of a template
+// literal, so the source can be embedded in the template string we serve.
+
+export const dynamic = "force-dynamic";
+
+function deployVersion(): string {
+  // next.config inlines this at build time; the .next/BUILD_ID read is a
+  // belt-and-braces fallback for the standalone runtime (Next writes the same
+  // id there). "dev" only in local `next dev`, where the SW is not registered.
+  const fromEnv = process.env.NEXT_PUBLIC_BUILD_ID;
+  if (fromEnv) return fromEnv;
+  try {
+    return readFileSync(join(process.cwd(), ".next", "BUILD_ID"), "utf8").trim();
+  } catch {
+    return "dev";
+  }
+}
+
+const SW_SOURCE = `// Service worker for EV Charging History.
+//
+// One cache ("shell-<version>"): app-shell HTML + static assets. The dashboard
+// is rendered by RSC with state baked into the HTML, so caching that HTML is
 // what gives us "offline read of the last known state" — there's no
 // client-side state API to layer SWR over.
 //
-// Bump CACHE_VERSION whenever the precache list or routing rules change;
-// the `activate` handler purges anything that doesn't match.
+// CACHE_VERSION guards the precache list / routing rules; the build id stamped
+// at the very top of this file (see src/app/sw.js/route.ts) is what makes the
+// worker byte-different per deploy so an installed PWA notices new versions.
 
 const CACHE_VERSION = "v2";
-const SHELL_CACHE = `shell-${CACHE_VERSION}`;
+const SHELL_CACHE = "shell-" + CACHE_VERSION;
 
 // Keep the precache minimal: Next ships hashed JS/CSS that will be fetched
 // lazily and cached opportunistically. We only need to guarantee the
@@ -99,4 +131,18 @@ async function cacheFirst(req, cacheName) {
   } catch {
     return cached || Response.error();
   }
+}
+`;
+
+export function GET() {
+  const body = `// build: ${deployVersion()}\n${SW_SOURCE}`;
+  return new Response(body, {
+    headers: {
+      "Content-Type": "text/javascript; charset=utf-8",
+      // Always revalidate the worker script itself so a new deploy is picked
+      // up promptly instead of being served from the HTTP cache.
+      "Cache-Control": "no-cache, no-store, must-revalidate",
+      "Service-Worker-Allowed": "/",
+    },
+  });
 }
