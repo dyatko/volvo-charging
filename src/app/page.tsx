@@ -222,11 +222,8 @@ export default async function Home({ searchParams }: { searchParams: Search }) {
           quota — Volvo&apos;s side stays happy, your data stays fresh.
         </p>
         <p className="mt-3">
-          You can{" "}
-          <a className="underline" href="/api/account/export">
-            export everything we have on you
-          </a>{" "}
-          as JSON anytime, and delete it in one click from the dashboard. See the{" "}
+          From your dashboard you can export everything we have on you as JSON anytime, or
+          delete it in one click. See the{" "}
           <Link href="/privacy" className="underline">
             privacy notice
           </Link>{" "}

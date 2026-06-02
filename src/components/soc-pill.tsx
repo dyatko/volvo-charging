@@ -13,7 +13,7 @@ const RADIUS = 9999; // px — outer corner radius of the pill
 // melts away into the thin 100% track instead of stopping at a fat rounded cap.
 // SVG can't vary stroke-width along one path, so we approximate the taper with a
 // short stack of butt-cap segments whose widths lerp across the run.
-const TAPER_LEN = 15; // px — how far before the target end the band starts thinning
+const TAPER_LEN = 30; // px — how far before the target end the band starts thinning
 const TAPER_END_WIDTH = 0.75; // px — width at the very tip (a hairline, thinner than the track)
 const TAPER_STEPS = 12; // sub-segments approximating the smooth taper
 const TAPER_SEAM = 0.5; // px — overlap so adjacent butt caps leave no hairline gap
