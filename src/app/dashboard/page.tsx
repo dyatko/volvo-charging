@@ -59,6 +59,11 @@ export default async function DashboardPage() {
   // health banner reflect the poll we just ran, not the one before it.
   const active = (await getVehicleRow(ctx.activeVehicle.vin)) ?? ctx.activeVehicle;
 
+  // Has the background poller gone stale (no successful read in a while)? Reuse
+  // seenAt (this request's timestamp) as "now" — calling Date.now() inline in
+  // the render below trips the react-hooks/purity rule.
+  const pollStale = isPollStale(active.lastSeenAt, seenAt.getTime());
+
   const latest = await latestSnapshot(active.vin);
 
   const sessionRows = await db
@@ -94,7 +99,7 @@ export default async function DashboardPage() {
           Your Energy API token has expired or is missing. Showing the last cached snapshot.
           <Link href="/" className="ml-1 underline">Sign in again</Link>.
         </div>
-      ) : isPollStale(active.lastSeenAt, Date.now()) ? (
+      ) : pollStale ? (
         // Creds look fine right now, but the background poller hasn't had a
         // successful read in a while — so data may be missing for that gap.
         // Only renders on a genuine stall; nothing shows when polling is healthy.
