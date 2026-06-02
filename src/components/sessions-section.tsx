@@ -296,7 +296,7 @@ export function SessionsSection({
         </div>
       ) : (
         <>
-          <p className="mt-3 text-center text-xs text-zinc-500 dark:text-zinc-400">
+          <p className="mt-3 text-sm text-zinc-500 dark:text-zinc-400">
             <span className="font-semibold tabular-nums text-zinc-700 dark:text-zinc-300">
               {visible.length}
             </span>{" "}
@@ -323,7 +323,7 @@ export function SessionsSection({
                   className="rounded-xl border border-zinc-200 bg-[#fcfcfc] p-3 dark:border-zinc-800 dark:bg-zinc-950"
                 >
                   {/* Top: where · when · live status (mirrors the status pill) */}
-                  <div className="flex flex-wrap items-center justify-center gap-x-1.5 gap-y-0.5 text-[10px] leading-tight text-zinc-500">
+                  <div className="flex flex-wrap items-center justify-center gap-x-1.5 gap-y-0.5 text-[11px] leading-tight text-zinc-500">
                     {locDisplay && loc ? (
                       <>
                         <span className={s.locationName ? undefined : "font-mono tabular-nums"}>
@@ -356,7 +356,7 @@ export function SessionsSection({
                         {displayEndSoc != null ? displayEndSoc : "…"}
                         <span className="text-xs font-normal text-zinc-500">%</span>
                       </div>
-                      <div className="text-[10px] leading-tight text-zinc-500">
+                      <div className="text-[11px] leading-tight text-zinc-500">
                         {s.peakPowerKw != null ? <>peak {fmtKw(s.peakPowerKw)} · </> : null}
                         {fmtSessionDuration(s.startedAt, s.endedAt)}
                       </div>
@@ -376,7 +376,7 @@ export function SessionsSection({
                       <div className="flex flex-wrap items-center justify-center gap-1">
                         {s.connectionType ? <Pill label={s.connectionType} /> : null}
                         {s.isOpen ? (
-                          <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium leading-none text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
+                          <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[11px] font-medium leading-none text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
                             in progress
                           </span>
                         ) : null}

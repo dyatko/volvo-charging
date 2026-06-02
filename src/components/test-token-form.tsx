@@ -151,7 +151,7 @@ function TokenField({
         className="mt-1 block w-full rounded-md border border-zinc-300 bg-white px-3 py-2 font-mono text-xs dark:border-zinc-700 dark:bg-zinc-900"
       />
       <span className="mt-1 block text-xs text-zinc-500">
-        Scopes: <code className="text-[10px]">{scopes}</code>.{" "}
+        Scopes: <code className="text-[11px]">{scopes}</code>.{" "}
         <a className="underline" href={link.href} target="_blank" rel="noreferrer">
           {link.label}
         </a>

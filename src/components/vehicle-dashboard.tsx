@@ -69,7 +69,7 @@ export function VehicleDashboard({
       >
         <div className="px-3 py-3">
           {/* Top: location · last updated, one-liner spanning the full width */}
-          <div className="flex flex-wrap items-center justify-center gap-x-1.5 gap-y-0.5 px-2 text-[10px] leading-tight text-zinc-500">
+          <div className="flex flex-wrap items-center justify-center gap-x-1.5 gap-y-0.5 px-2 text-[11px] leading-tight text-zinc-500">
             {vehicle.currentLat != null && vehicle.currentLng != null ? (
               <span className={vehicle.locationName ? undefined : "font-mono tabular-nums"}>
                 <span aria-hidden>📍</span>{" "}
@@ -102,7 +102,7 @@ export function VehicleDashboard({
                 {latest?.soc != null ? latest.soc : "—"}
                 <span className="text-xs font-normal text-zinc-500">%</span>
               </div>
-              <div className="text-[10px] leading-tight text-zinc-500">
+              <div className="text-[11px] leading-tight text-zinc-500">
                 {latest?.rangeKm != null ? <>~{latest.rangeKm}&nbsp;km</> : "range —"}
                 {latest?.targetSoc != null ? <> · target&nbsp;{latest.targetSoc}%</> : null}
               </div>

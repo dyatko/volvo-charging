@@ -114,6 +114,10 @@ pnpm-workspace.yaml             # onlyBuiltDependencies allow-list (pnpm 11 supp
 
 - **British English everywhere.** All user-facing copy, metadata, and comments use UK spelling and vocabulary: `colour` not `color`, `organise`/`authorise`/`recognise` not `-ize`, `licence` (noun), `tyre` not `tire`, `behaviour`, `centre` (prose only), etc. Do **not** rename code identifiers, CSS classes (`text-center`, `color:`), API field names, or generated files — spelling rules apply to prose, not code.
 
+## UI
+
+- **11px is the floor for any rendered text.** Never use a font size below 11px — no `text-[10px]`, `text-[9px]`, or any arbitrary value under `text-[11px]`. The smallest acceptable sizes are `text-[11px]` and Tailwind's `text-xs` (12px). This applies to every surface: dashboard, sessions, pills, footnotes, badges, the landing example — everywhere. When something feels like it needs to be tiny, use `text-[11px]` plus `leading-tight` and muted colour (`text-zinc-500`) rather than shrinking the type.
+
 ## Common tasks
 
 - **Run `nvm use` first.** This project needs Node 24 (`.nvmrc`; `engines.node >=24`).

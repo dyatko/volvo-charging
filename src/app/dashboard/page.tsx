@@ -110,7 +110,7 @@ export default async function DashboardPage() {
           charging data for this period may be missing.
           <Link href="/" className="ml-1 underline">Reconnect Volvo</Link>.
           {active.lastError ? (
-            <span className="mt-1 block font-mono text-[10px] opacity-70">{active.lastError}</span>
+            <span className="mt-1 block font-mono text-[11px] opacity-70">{active.lastError}</span>
           ) : null}
         </div>
       ) : null}

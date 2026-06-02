@@ -270,7 +270,7 @@ function DashboardPreview() {
         className="absolute left-1/2 top-2 h-1.5 w-16 -translate-x-1/2 rounded-full bg-zinc-300 dark:bg-zinc-700"
       />
       <div className="pointer-events-none absolute right-0 top-0 h-30 w-30 overflow-hidden">
-        <span className="absolute -right-11 top-6.5 w-42.5 rotate-45 bg-emerald-400 py-1.25 text-center text-[9px] font-semibold uppercase tracking-[0.12em] text-emerald-950 shadow-md">
+        <span className="absolute -right-11 top-6.5 w-42.5 rotate-45 bg-emerald-400 py-1.25 text-center text-[11px] font-semibold uppercase tracking-[0.12em] text-emerald-950 shadow-md">
           Live example
         </span>
       </div>
