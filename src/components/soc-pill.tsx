@@ -9,6 +9,15 @@ const ARC_WIDTH = 4; // px — the target + current progress arcs
 // so they stay aligned at any size.
 const RADIUS = 9999; // px — outer corner radius of the pill
 
+// The target arc's final stretch thins from ARC_WIDTH down to a fine tip so it
+// melts away into the thin 100% track instead of stopping at a fat rounded cap.
+// SVG can't vary stroke-width along one path, so we approximate the taper with a
+// short stack of butt-cap segments whose widths lerp across the run.
+const TAPER_LEN = 15; // px — how far before the target end the band starts thinning
+const TAPER_END_WIDTH = 0.75; // px — width at the very tip (a hairline, thinner than the track)
+const TAPER_STEPS = 12; // sub-segments approximating the smooth taper
+const TAPER_SEAM = 0.5; // px — overlap so adjacent butt caps leave no hairline gap
+
 /**
  * A Volvo-cluster-style status pill: content sits inside a rounded "stadium"
  * whose border doubles as a charge-progress indicator. Three layers, all
@@ -59,6 +68,9 @@ export function SocPill({
   let perim = 1;
   let valueDash = 0;
   let targetDash = 0;
+  // The solid (full-width) head of the target arc, and the tapering tail.
+  let targetMainDash = 0;
+  const taperSegs: { dash: string; offset: number; width: number }[] = [];
   if (box) {
     const inset = ARC_WIDTH / 2;
     const w = box.w - ARC_WIDTH;
@@ -77,6 +89,22 @@ export function SocPill({
     valueDash = (perim * Math.max(0, Math.min(100, value))) / 100;
     targetDash =
       targetSoc != null ? (perim * Math.max(0, Math.min(100, targetSoc))) / 100 : 0;
+    if (targetDash > 0) {
+      // Reserve the final TAPER_LEN (or the whole arc, if shorter) for the
+      // thinning tail; the rest is drawn at full ARC_WIDTH.
+      const taperLen = Math.min(TAPER_LEN, targetDash);
+      targetMainDash = targetDash - taperLen;
+      const segLen = taperLen / TAPER_STEPS;
+      for (let i = 0; i < TAPER_STEPS; i++) {
+        const start = targetMainDash + i * segLen;
+        const t = (i + 0.5) / TAPER_STEPS; // 0 → ARC_WIDTH, 1 → TAPER_END_WIDTH
+        taperSegs.push({
+          dash: `${segLen + TAPER_SEAM} ${perim}`,
+          offset: -start,
+          width: ARC_WIDTH + (TAPER_END_WIDTH - ARC_WIDTH) * t,
+        });
+      }
+    }
     dPath = [
       `M ${cx} ${top}`,
       `L ${right - r} ${top}`,
@@ -109,17 +137,36 @@ export function SocPill({
           style={{ top: -TRACK_WIDTH, left: -TRACK_WIDTH, overflow: "visible" }}
         >
           {/* Target arc (drawn first, under the colour) — darker grey to the
-              target's perimeter distance. */}
+              target's perimeter distance. Its full-width head is butt-capped so
+              the tapering tail can thin it from ARC_WIDTH down to TRACK_WIDTH,
+              blending into the thin 100% track instead of a fat rounded cap. */}
           {showTarget ? (
-            <path
-              d={dPath}
-              fill="none"
-              className="text-zinc-300 dark:text-zinc-600"
-              stroke="currentColor"
-              strokeWidth={ARC_WIDTH}
-              strokeLinecap="round"
-              strokeDasharray={`${targetDash} ${perim}`}
-            />
+            <>
+              {targetMainDash > 0 ? (
+                <path
+                  d={dPath}
+                  fill="none"
+                  className="text-zinc-300 dark:text-zinc-600"
+                  stroke="currentColor"
+                  strokeWidth={ARC_WIDTH}
+                  strokeLinecap="butt"
+                  strokeDasharray={`${targetMainDash} ${perim}`}
+                />
+              ) : null}
+              {taperSegs.map((s, i) => (
+                <path
+                  key={i}
+                  d={dPath}
+                  fill="none"
+                  className="text-zinc-300 dark:text-zinc-600"
+                  stroke="currentColor"
+                  strokeWidth={s.width}
+                  strokeLinecap="butt"
+                  strokeDasharray={s.dash}
+                  strokeDashoffset={s.offset}
+                />
+              ))}
+            </>
           ) : null}
           {/* Current charge arc — the colour, on top. */}
           {showValue ? (
