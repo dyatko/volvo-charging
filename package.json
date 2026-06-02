@@ -8,6 +8,7 @@
     "node": ">=24"
   },
   "scripts": {
+    "predev": "pnpm db:up && pnpm db:migrate",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
@@ -16,7 +17,7 @@
     "gen:conve": "openapi-typescript openapi/connected-vehicle-api.json -o src/lib/volvo/conve.gen.ts",
     "gen:location": "openapi-typescript openapi/location-api.json -o src/lib/volvo/location.gen.ts",
     "gen:api": "pnpm gen:energy && pnpm gen:conve && pnpm gen:location",
-    "db:up": "docker compose up -d db",
+    "db:up": "docker compose up -d --wait db",
     "db:down": "docker compose down",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
