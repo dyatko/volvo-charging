@@ -55,9 +55,9 @@ You need Node 24 (see `.nvmrc`), pnpm 11 (auto-installed via `corepack`), and Do
 pnpm install
 pnpm gen:api
 
-# 2. Bring up local Postgres
-pnpm db:up
-pnpm db:migrate
+# 2. Bring up local Postgres (optional — `pnpm dev` does this for you)
+pnpm db:up        # starts Postgres and waits until it's accepting connections
+pnpm db:migrate   # applies pending migrations
 
 # 3. Local secrets
 cp .env.example .env.local
@@ -69,7 +69,7 @@ cp .env.example .env.local
 #   — obtained by registering and publishing your own app at
 #     developer.volvocars.com (see "Adding your Volvo credentials" below).
 
-# 4. Run the app
+# 4. Run the app (a `predev` hook brings Postgres up and migrates first)
 pnpm dev
 open http://localhost:3000
 ```

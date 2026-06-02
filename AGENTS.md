@@ -122,7 +122,7 @@ pnpm-workspace.yaml             # onlyBuiltDependencies allow-list (pnpm 11 supp
 
 | Goal | Command |
 |---|---|
-| Run app locally | `pnpm dev` |
+| Run app locally | `pnpm dev` (a `predev` hook runs `db:up` + `db:migrate` first) |
 | Regenerate typed Volvo clients | `pnpm gen:api` |
 | Start local Postgres | `pnpm db:up` |
 | Stop local Postgres | `pnpm db:down` |
