@@ -44,7 +44,8 @@ src/
     ├── polling.ts              # pollOne + pollAllVehicles (IO shell) + latestSnapshot
     ├── snapshot.ts             # PURE: deriveSnapshot / dedup / plug-transition (tested)
     ├── sessions.ts             # PURE: energyKwhFromSoc — shared poller ↔ dashboard
-    ├── pollCadence.ts          # PURE: adaptive next-poll interval + haversine (tested)
+    ├── pollCadence.ts          # PURE: adaptive next-poll interval + haversine + isPollStale (tested)
+    ├── log.ts                  # structured logger: JSON for Cloud Logging in prod, readable in dev
     ├── env.ts                  # optionalEnv(): env value or null (SET_ME placeholder)
     ├── brand.ts                # brand palette + hexToRgb (logo / ring / map pins)
     ├── soc-color.ts            # PURE: socRingColor — SOC ring colour interpolation

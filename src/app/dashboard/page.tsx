@@ -5,11 +5,13 @@ import { desc, eq } from "drizzle-orm";
 import { db } from "@/db/client";
 import { chargingSessions, users } from "@/db/schema";
 import { getSession } from "@/lib/session";
-import { loadUserContext } from "@/lib/userVehicle";
+import { loadUserContext, getVehicleRow } from "@/lib/userVehicle";
 import { latestSnapshot, pollAllVehicles } from "@/lib/polling";
+import { isPollStale } from "@/lib/pollCadence";
 import { resolveLocationLabels } from "@/lib/geocoding/labels";
 import { getGoogleMapsBrowserKey, getGoogleMapsMapId } from "@/lib/maps/config";
 import { AutoRefresh } from "@/components/auto-refresh";
+import { RelativeTime } from "@/components/relative-time";
 import { DangerZone } from "@/components/danger-zone";
 import { VehicleDashboard } from "@/components/vehicle-dashboard";
 import { sessionLatLng } from "@/lib/dashboard/types";
@@ -51,7 +53,11 @@ export default async function DashboardPage() {
     await pollAllVehicles(ctx).catch(() => undefined);
   }
 
-  const active = ctx.activeVehicle;
+  // Re-read the active vehicle: the force-poll above wrote fresh last_seen_at /
+  // last_polled_at / last_error to the DB, but ctx.activeVehicle is the snapshot
+  // from *before* the poll. Render the post-poll row so "Updated …" and the
+  // health banner reflect the poll we just ran, not the one before it.
+  const active = (await getVehicleRow(ctx.activeVehicle.vin)) ?? ctx.activeVehicle;
 
   const latest = await latestSnapshot(active.vin);
 
@@ -87,6 +93,20 @@ export default async function DashboardPage() {
         <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-700 dark:bg-amber-900/20 dark:text-amber-200">
           Your Energy API token has expired or is missing. Showing the last cached snapshot.
           <Link href="/" className="ml-1 underline">Sign in again</Link>.
+        </div>
+      ) : isPollStale(active.lastSeenAt, Date.now()) ? (
+        // Creds look fine right now, but the background poller hasn't had a
+        // successful read in a while — so data may be missing for that gap.
+        // Only renders on a genuine stall; nothing shows when polling is healthy.
+        <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-700 dark:bg-amber-900/20 dark:text-amber-200">
+          We haven&apos;t been able to update {active.model ? `your ${active.model}` : "your car"} since{" "}
+          <RelativeTime iso={active.lastSeenAt ? active.lastSeenAt.toISOString() : null} />
+          {active.consecutiveFailures > 0 ? ` (${active.consecutiveFailures} failed attempts)` : ""}, so
+          charging data for this period may be missing.
+          <Link href="/" className="ml-1 underline">Reconnect Volvo</Link>.
+          {active.lastError ? (
+            <span className="mt-1 block font-mono text-[10px] opacity-70">{active.lastError}</span>
+          ) : null}
         </div>
       ) : null}
 

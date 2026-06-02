@@ -3,6 +3,7 @@ import { db } from "@/db/client";
 import { users, volvoCredentials, volvoTokens, vehicles } from "@/db/schema";
 import { decrypt, encrypt } from "@/lib/crypto";
 import { refreshAccessToken } from "@/lib/oauth";
+import { log, errText } from "@/lib/log";
 import type { VolvoCreds } from "@/lib/volvo/client";
 
 export type VehicleRow = {
@@ -21,8 +22,41 @@ export type VehicleRow = {
   currentLng: number | null;
   locationUpdatedAt: Date | null;
   lastSeenAt: Date | null;
+  /** Last *attempt* time — advances on every poll, success or failure. */
+  lastPolledAt: Date | null;
+  /** Most recent poll failure reason; null after a successful poll. */
+  lastError: string | null;
+  /** Consecutive failed polls; 0 after a success. Drives the stall banner. */
+  consecutiveFailures: number;
   nextPollAt: Date;
 };
+
+/**
+ * The column projection for a VehicleRow. Shared by loadUserContext (all of a
+ * user's vehicles), getVehicleRow (a single re-read), and the header nav, so
+ * they can never drift out of shape.
+ */
+export const vehicleColumns = {
+  vin: vehicles.vin,
+  model: vehicles.model,
+  modelYear: vehicles.modelYear,
+  fuelType: vehicles.fuelType,
+  externalColour: vehicles.externalColour,
+  batteryCapacityKwh: vehicles.batteryCapacityKwh,
+  gearbox: vehicles.gearbox,
+  upholstery: vehicles.upholstery,
+  steering: vehicles.steering,
+  exteriorImageUrl: vehicles.exteriorImageUrl,
+  internalImageUrl: vehicles.internalImageUrl,
+  currentLat: vehicles.currentLat,
+  currentLng: vehicles.currentLng,
+  locationUpdatedAt: vehicles.locationUpdatedAt,
+  lastSeenAt: vehicles.lastSeenAt,
+  lastPolledAt: vehicles.lastPolledAt,
+  lastError: vehicles.lastError,
+  consecutiveFailures: vehicles.consecutiveFailures,
+  nextPollAt: vehicles.nextPollAt,
+} as const;
 
 export type ApiKind = "energy" | "conve" | "location";
 
@@ -73,7 +107,16 @@ export async function loadUserContext(userId: string): Promise<UserContext | nul
       .where(eq(volvoTokens.userId, userId))
       .limit(1)
   )[0];
-  if (!credsRow || !tokensRow) return null;
+  if (!credsRow || !tokensRow) {
+    // No Volvo grant on file — polling can't run. Surface it so a user whose
+    // tokens were never stored (or were wiped) doesn't fail silently.
+    log.warn("loadUserContext: no Volvo credentials/tokens", {
+      userId,
+      hasCreds: !!credsRow,
+      hasTokens: !!tokensRow,
+    });
+    return null;
+  }
 
   const vccApiKey = decrypt(credsRow.vccApiKeyEnc);
 
@@ -110,7 +153,10 @@ export async function loadUserContext(userId: string): Promise<UserContext | nul
             .where(eq(volvoTokens.userId, userId));
         }
       } catch (e) {
-        console.error("token refresh failed", e);
+        // The whole user is skipped this tick (and every tick until a fresh
+        // grant lands) — the single most common cause of a silently stalled
+        // poller, so log it loudly with the reason.
+        log.error("token refresh failed", { userId, reason: errText(e) });
         return null;
       }
     }
@@ -141,24 +187,7 @@ export async function loadUserContext(userId: string): Promise<UserContext | nul
 
   // All vehicles linked to this user.
   const vehicleRows = await db
-    .select({
-      vin: vehicles.vin,
-      model: vehicles.model,
-      modelYear: vehicles.modelYear,
-      fuelType: vehicles.fuelType,
-      externalColour: vehicles.externalColour,
-      batteryCapacityKwh: vehicles.batteryCapacityKwh,
-      gearbox: vehicles.gearbox,
-      upholstery: vehicles.upholstery,
-      steering: vehicles.steering,
-      exteriorImageUrl: vehicles.exteriorImageUrl,
-      internalImageUrl: vehicles.internalImageUrl,
-      currentLat: vehicles.currentLat,
-      currentLng: vehicles.currentLng,
-      locationUpdatedAt: vehicles.locationUpdatedAt,
-      lastSeenAt: vehicles.lastSeenAt,
-      nextPollAt: vehicles.nextPollAt,
-    })
+    .select(vehicleColumns)
     .from(vehicles)
     .where(eq(vehicles.userId, userId))
     .orderBy(vehicles.vin);
@@ -182,6 +211,19 @@ export async function loadUserContext(userId: string): Promise<UserContext | nul
     vehicles: vehicleRows,
     activeVehicle,
   };
+}
+
+/**
+ * Re-read one vehicle row in the same shape as loadUserContext. The dashboard
+ * uses this after its force-poll: ctx.activeVehicle is the snapshot from before
+ * the poll, so reading it back picks up the fresh last_seen_at / last_error the
+ * poll just wrote (otherwise "Updated …" shows the pre-poll timestamp).
+ */
+export async function getVehicleRow(vin: string): Promise<VehicleRow | null> {
+  const row = (
+    await db.select(vehicleColumns).from(vehicles).where(eq(vehicles.vin, vin)).limit(1)
+  )[0];
+  return row ?? null;
 }
 
 /** Set the user's active vehicle. Throws if vin doesn't belong to the user. */

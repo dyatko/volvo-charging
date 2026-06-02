@@ -27,6 +27,19 @@ export const IDLE_ACTIVITY_WINDOW_MS = 20 * 60_000;
 /** Position delta (metres) above which we treat the car as having moved. */
 export const MOVEMENT_THRESHOLD_M = 100;
 
+/**
+ * How stale `last_seen_at` (the last *successful* poll) may get before the
+ * dashboard warns that data may be missing. A healthy poller refreshes at worst
+ * every `idle` interval (5 min); 15 min is comfortably past that, so this only
+ * trips on a genuine stall — dead token, failing API, or the scheduler down.
+ */
+export const POLL_STALE_MS = 15 * 60_000;
+
+/** True when there's been no successful poll within POLL_STALE_MS (or ever). */
+export function isPollStale(lastSeenAt: Date | null, now: number): boolean {
+  return !lastSeenAt || now - lastSeenAt.getTime() > POLL_STALE_MS;
+}
+
 const CONNECTED_STATES = new Set(["CONNECTED", "CONNECTED_AC", "CONNECTED_DC"]);
 
 /** True when the charge cable is in (any AC/DC variant). */

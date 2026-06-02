@@ -87,6 +87,12 @@ export const vehicles = pgTable(
     lastSeenAt: timestamp("last_seen_at", { withTimezone: true }),
     nextPollAt: timestamp("next_poll_at", { withTimezone: true }).defaultNow().notNull(),
     consecutiveFailures: smallint("consecutive_failures").default(0).notNull(),
+    // When we last *attempted* a poll (success or failure). last_seen_at only
+    // advances on a successful read, so the gap (last_polled_at - last_seen_at)
+    // is how long polling has been failing. last_error holds the most recent
+    // failure reason and is cleared (null) on the next success.
+    lastPolledAt: timestamp("last_polled_at", { withTimezone: true }),
+    lastError: text("last_error"),
   },
   (t) => [index("vehicles_user_idx").on(t.userId), index("vehicles_next_poll_idx").on(t.nextPollAt)],
 );

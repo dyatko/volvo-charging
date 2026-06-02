@@ -18,6 +18,7 @@ const geistMono = Geist_Mono({
 import { Nav } from "@/components/nav";
 import { Footer } from "@/components/footer";
 import { getSession } from "@/lib/session";
+import { vehicleColumns } from "@/lib/userVehicle";
 import { db } from "@/db/client";
 import { stateSnapshots, users, vehicles } from "@/db/schema";
 import { desc, eq } from "drizzle-orm";
@@ -110,24 +111,7 @@ export default async function RootLayout({
       await db.select({ activeVin: users.activeVin }).from(users).where(eq(users.id, session.userId)).limit(1)
     )[0];
     const list = await db
-      .select({
-        vin: vehicles.vin,
-        model: vehicles.model,
-        modelYear: vehicles.modelYear,
-        fuelType: vehicles.fuelType,
-        externalColour: vehicles.externalColour,
-        batteryCapacityKwh: vehicles.batteryCapacityKwh,
-        gearbox: vehicles.gearbox,
-        upholstery: vehicles.upholstery,
-        steering: vehicles.steering,
-        exteriorImageUrl: vehicles.exteriorImageUrl,
-        internalImageUrl: vehicles.internalImageUrl,
-        currentLat: vehicles.currentLat,
-        currentLng: vehicles.currentLng,
-        locationUpdatedAt: vehicles.locationUpdatedAt,
-        lastSeenAt: vehicles.lastSeenAt,
-        nextPollAt: vehicles.nextPollAt,
-      })
+      .select(vehicleColumns)
       .from(vehicles)
       .where(eq(vehicles.userId, session.userId))
       .orderBy(vehicles.vin);

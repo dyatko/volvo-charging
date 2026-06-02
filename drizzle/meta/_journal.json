@@ -50,6 +50,13 @@
       "when": 1780310566844,
       "tag": "0006_gigantic_texas_twister",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1780429312362,
+      "tag": "0007_bent_black_bolt",
+      "breakpoints": true
     }
   ]
 }

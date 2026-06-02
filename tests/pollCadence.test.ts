@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   decidePollInterval,
   isConnected,
+  isPollStale,
   metersBetween,
   POLL_INTERVAL_MS,
+  POLL_STALE_MS,
   type CadenceSignals,
 } from "@/lib/pollCadence";
 
@@ -26,6 +28,21 @@ function signals(overrides: Partial<CadenceSignals> = {}): CadenceSignals {
 }
 
 const decide = (o: Partial<CadenceSignals> = {}) => decidePollInterval(signals(o), NOW);
+
+describe("isPollStale", () => {
+  it("is fresh just under the threshold and stale just over it", () => {
+    expect(isPollStale(new Date(NOW - (POLL_STALE_MS - 1_000)), NOW)).toBe(false);
+    expect(isPollStale(new Date(NOW - (POLL_STALE_MS + 1_000)), NOW)).toBe(true);
+  });
+
+  it("treats a never-polled vehicle (null) as stale", () => {
+    expect(isPollStale(null, NOW)).toBe(true);
+  });
+
+  it("a poll at the healthy idle cadence (5 min) is not stale", () => {
+    expect(isPollStale(new Date(NOW - POLL_INTERVAL_MS.idle), NOW)).toBe(false);
+  });
+});
 
 describe("isConnected", () => {
   it("recognises every CONNECTED* variant and rejects the rest", () => {

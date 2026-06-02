@@ -10,6 +10,7 @@ import {
 } from "@/lib/snapshot";
 import { energyKwhFromSoc } from "@/lib/sessions";
 import { reverseGeocode } from "@/lib/geocoding/service";
+import { log, errText } from "@/lib/log";
 import {
   decidePollInterval,
   isConnected,
@@ -50,15 +51,21 @@ export async function pollOne(opts: {
   );
   if (error || !data) {
     // Back off lightly: retry at ~1 min rather than hammering a failing
-    // vehicle on every tick, and keep a visible failure count.
+    // vehicle on every tick, and keep a visible failure count + reason.
+    const status = response?.status;
+    const reason = errText(error ?? "unknown");
+    const lastError = (status ? `HTTP ${status}: ${reason}` : reason).slice(0, 500);
     await db
       .update(vehicles)
       .set({
+        lastPolledAt: new Date(),
         nextPollAt: new Date(Date.now() + 60_000),
         consecutiveFailures: sql`${vehicles.consecutiveFailures} + 1`,
+        lastError,
       })
       .where(eq(vehicles.vin, opts.vin));
-    return { ok: false, reason: JSON.stringify(error ?? "unknown"), status: response?.status };
+    log.warn("poll failed", { vin: opts.vin, status, reason });
+    return { ok: false, reason, status };
   }
 
   const derived = deriveSnapshot(data);
@@ -97,8 +104,10 @@ export async function pollOne(opts: {
       .update(vehicles)
       .set({
         lastSeenAt: new Date(now),
+        lastPolledAt: new Date(now),
         nextPollAt: new Date(now + interval),
         consecutiveFailures: 0,
+        lastError: null,
       })
       .where(eq(vehicles.vin, opts.vin));
     return { ok: true, snapshotInserted: false, observedAt, transition: "none" };
@@ -228,8 +237,10 @@ export async function pollOne(opts: {
     .update(vehicles)
     .set({
       lastSeenAt: new Date(now),
+      lastPolledAt: new Date(now),
       nextPollAt: new Date(now + interval),
       consecutiveFailures: 0,
+      lastError: null,
     })
     .where(eq(vehicles.vin, opts.vin));
 
@@ -276,9 +287,32 @@ export async function pollAllVehicles(
 ): Promise<Array<{ vin: string; outcome: PollOutcome }>> {
   const energyCreds = ctx.credsFor("energy");
   if (!energyCreds) {
+    const reason = "no usable Energy API token";
+    log.warn("poll skipped: no usable Energy API token", {
+      userId: ctx.userId,
+      vehicles: ctx.vehicles.length,
+    });
+    // Record the stall on every vehicle. Without this the failure is invisible:
+    // the tick never reaches pollOne, so last_error/last_polled_at would stay
+    // stale and the dashboard's health banner couldn't tell why data stopped —
+    // including the common case where a fresh login refreshes creds (so they
+    // look fine at view time) while the background poller has been dead.
+    await Promise.all(
+      ctx.vehicles.map((v) =>
+        db
+          .update(vehicles)
+          .set({
+            lastPolledAt: new Date(),
+            lastError: reason,
+            consecutiveFailures: sql`${vehicles.consecutiveFailures} + 1`,
+            nextPollAt: new Date(Date.now() + 60_000),
+          })
+          .where(eq(vehicles.vin, v.vin)),
+      ),
+    ).catch((e) => log.error("failed to record poll stall", { userId: ctx.userId, reason: errText(e) }));
     return ctx.vehicles.map((v) => ({
       vin: v.vin,
-      outcome: { ok: false, reason: "no usable Energy API token" },
+      outcome: { ok: false, reason },
     }));
   }
   const locationCreds = ctx.credsFor("location");
