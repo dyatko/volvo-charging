@@ -86,16 +86,58 @@ export async function pollOne(opts: {
 
   const now = Date.now();
 
+  // Refresh the car's live position. We fetch Location on any observable change
+  // (so a charging tick / session boundary still captures a fresh fix, as before)
+  // AND on every poll while the cable is OUT. A driving car's position changes
+  // without any Energy field changing — Volvo's Energy API tends to go quiet in
+  // motion — so coupling Location to Energy changes freezes the map mid-trip
+  // (start location sticks for the whole drive). A plugged-in car is parked at
+  // its charger, so we keep the cheap fetch-on-change path there. This widens
+  // Location usage for unplugged cars; see the "Rate budget" note in AGENTS.md.
+  const disconnected = !isConnected(next.connectionStatus);
+  const wantLocation = !!opts.locationCreds && (!observableEqual || disconnected);
+
+  let liveLocation: { lat: number; lng: number } | null = null;
+  if (wantLocation && opts.locationCreds) {
+    liveLocation = await fetchLocation(opts.vin, opts.locationCreds);
+    if (liveLocation) {
+      await db
+        .update(vehicles)
+        .set({
+          currentLat: liveLocation.lat,
+          currentLng: liveLocation.lng,
+          locationUpdatedAt: new Date(now),
+        })
+        .where(eq(vehicles.vin, opts.vin));
+      // Warm the geocode cache for this position. One call per poll covers the
+      // session start/end coords too (they equal liveLocation and the cache is
+      // position-keyed). Best-effort: a geocode failure must never affect the poll.
+      await reverseGeocode(liveLocation.lat, liveLocation.lng).catch(() => null);
+    }
+  }
+
+  // Movement: did the car's position move beyond the threshold since the last
+  // stored fix? This tells a driving car apart from one whose SOC/range merely
+  // drifted while parked, and keeps a moving car on the 1-min cadence even when
+  // no Energy field changed. Only meaningful when we fetched a fresh Location.
+  const moved =
+    !!liveLocation &&
+    opts.prevLat != null &&
+    opts.prevLng != null &&
+    metersBetween(opts.prevLat, opts.prevLng, liveLocation.lat, liveLocation.lng) >
+      MOVEMENT_THRESHOLD_M;
+
   if (observableEqual) {
-    // Nothing changed: no insert, no Location call. Still bump last_seen and
-    // schedule the next poll from the (unchanged) state — a parked car that
-    // last changed long ago slips to the idle cadence.
+    // No observable Energy change: no snapshot, no session work. But the car may
+    // still be driving, so we keep last_seen fresh and feed `moved` into the
+    // cadence — a moving car stays at 1 min, a parked-unplugged one relaxes to
+    // idle. Its live position was already refreshed above when disconnected.
     const interval = decidePollInterval(
       {
         connectionStatus: next.connectionStatus ?? null,
         chargingStatus: next.chargingStatus ?? null,
         lastChangeAt: prev?.observedAt ?? observedAt,
-        moved: false,
+        moved,
         userLastSeenAt: opts.userLastSeenAt ?? null,
       },
       now,
@@ -115,29 +157,6 @@ export async function pollOne(opts: {
 
   // Insert (idempotent on (vin, observed_at) unique index).
   await db.insert(stateSnapshots).values(next).onConflictDoNothing();
-
-  // Refresh "current location" only when something observable actually
-  // changed. For a parked car this fires roughly once a day; for a charging
-  // car it fires when SOC ticks (every few %). Sticks to Volvo's 10k/day
-  // app-wide quota even with many users.
-  let liveLocation: { lat: number; lng: number } | null = null;
-  if (opts.locationCreds) {
-    liveLocation = await fetchLocation(opts.vin, opts.locationCreds);
-    if (liveLocation) {
-      await db
-        .update(vehicles)
-        .set({
-          currentLat: liveLocation.lat,
-          currentLng: liveLocation.lng,
-          locationUpdatedAt: new Date(),
-        })
-        .where(eq(vehicles.vin, opts.vin));
-      // Warm the geocode cache for this position. One call per poll covers the
-      // session start/end coords too (they equal liveLocation and the cache is
-      // position-keyed). Best-effort: a geocode failure must never affect the poll.
-      await reverseGeocode(liveLocation.lat, liveLocation.lng).catch(() => null);
-    }
-  }
 
   // Derive session transitions.
   //
@@ -212,17 +231,8 @@ export async function pollOne(opts: {
     }
   }
 
-  // Movement: did the car's position move since the last stored fix? This
-  // tells a driving car apart from one whose SOC/range merely drifted while
-  // parked. Only meaningful when we actually fetched a fresh Location.
-  const moved =
-    !!liveLocation &&
-    opts.prevLat != null &&
-    opts.prevLng != null &&
-    metersBetween(opts.prevLat, opts.prevLng, liveLocation.lat, liveLocation.lng) >
-      MOVEMENT_THRESHOLD_M;
-
-  // Something just changed, so lastChangeAt is now.
+  // Something just changed, so lastChangeAt is now. `moved` was computed above
+  // (right after the Location fetch) and is reused here.
   const interval = decidePollInterval(
     {
       connectionStatus: next.connectionStatus ?? null,
