@@ -9,7 +9,6 @@ import {
   snapshotObservablyEqual,
 } from "@/lib/snapshot";
 import { energyKwhFromSoc } from "@/lib/sessions";
-import { reverseGeocode } from "@/lib/geocoding/service";
 import { log, errText } from "@/lib/log";
 import {
   decidePollInterval,
@@ -109,10 +108,12 @@ export async function pollOne(opts: {
           locationUpdatedAt: new Date(now),
         })
         .where(eq(vehicles.vin, opts.vin));
-      // Warm the geocode cache for this position. One call per poll covers the
-      // session start/end coords too (they equal liveLocation and the cache is
-      // position-keyed). Best-effort: a geocode failure must never affect the poll.
-      await reverseGeocode(liveLocation.lat, liveLocation.lng).catch(() => null);
+      // We deliberately do NOT reverse-geocode here. The poller only stores raw
+      // coordinates; the coarse "Area · City" label is resolved lazily by
+      // resolveLocationLabels() on the dashboard read path (a self-populating
+      // cache). That way we geocode only the positions the UI actually displays
+      // — the current fix and visible sessions — instead of every point a moving
+      // car emits, most of which nobody ever looks at.
     }
   }
 
