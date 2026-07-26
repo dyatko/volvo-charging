@@ -32,7 +32,7 @@
     "google-auth-library": "^10.6.2",
     "iron-session": "^8.0.4",
     "next": "16.2.6",
-    "next-auth": "^4.24.14",
+    "next-auth": "^4.24.15",
     "openapi-fetch": "^0.17.0",
     "openid-client": "^6.8.4",
     "p-limit": "^7.3.0",
