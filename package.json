@@ -31,7 +31,7 @@
     "drizzle-orm": "^0.45.2",
     "google-auth-library": "^10.6.2",
     "iron-session": "^8.0.4",
-    "next": "16.2.6",
+    "next": "16.2.11",
     "next-auth": "^4.24.14",
     "openapi-fetch": "^0.17.0",
     "openid-client": "^6.8.4",
